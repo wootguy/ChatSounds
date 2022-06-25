@@ -213,11 +213,15 @@ void showSoundStats(CBasePlayer@ plr, string chatTrigger) {
     }
     chatTrigger = chatTrigger.ToLowercase();
     
-    g_stats.sort(function(a,b) { return a.totalUses > b.totalUses; });
-    
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nUsage stats for " + g_SoundListKeys.size() + " chat sounds\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\n      Sound               Uses     Users");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\n-------------------------------------------\n");
+	if (g_stats.size() > 1) {
+		g_stats.sort(function(a,b) { return a.totalUses > b.totalUses; });
+	}
+	
+	array<string> statPrints;
+	
+    statPrints.insertLast("\nUsage stats for " + g_SoundListKeys.size() + " chat sounds\n");
+    statPrints.insertLast("\n       Sound               Uses     Users");
+    statPrints.insertLast("\n--------------------------------------------\n");
 
     int position = 1;
     int allSoundUses = 0;
@@ -226,15 +230,19 @@ void showSoundStats(CBasePlayer@ plr, string chatTrigger) {
             continue; // chat sound not loaded
         }
     
-        string line = " " + position + ") " + g_stats[i].chatTrigger;
-        
-        if (position < 100) {
-            line = " " + line;
+		ChatSound@ sound = cast<ChatSound@>(g_SoundList[g_stats[i].chatTrigger]);
+		
+		string posString = position;
+		if (position < 100) {
+            posString = " " + posString;
         }
         if (position < 10) {
-            line = " " + line;
+            posString = " " + posString;
         }
         position++;
+		
+        string line = (sound.isPrecached ? "* " : "  ") + posString + ") " + g_stats[i].chatTrigger;
+      
         
         int padding = 20 - g_stats[i].chatTrigger.Length();
         for (int k = 0; k < padding; k++)
@@ -253,7 +261,7 @@ void showSoundStats(CBasePlayer@ plr, string chatTrigger) {
         line += users;
         
         line += "\n";
-        g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, line);
+        statPrints.insertLast(line);
         
         allSoundUses += g_stats[i].totalUses;
     }
@@ -264,10 +272,39 @@ void showSoundStats(CBasePlayer@ plr, string chatTrigger) {
         totals += " ";
     totals += unique_users.size();
 
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "-------------------------------------------\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "                  Total:  " + totals + "\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nUses   = Number of times a chat sound has been used.");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nUsers  = Number of unique players that have used the sound.\n\n");
+    statPrints.insertLast("--------------------------------------------\n");
+    statPrints.insertLast("                    Total:  " + totals + "\n");
+    statPrints.insertLast("\n*      = Sound is currently loaded.");
+    statPrints.insertLast("\nUses   = Number of times a chat sound has been used.");
+    statPrints.insertLast("\nUsers  = Number of unique players that have used the sound.\n\n");
+	
+	delay_print(EHandle(plr), statPrints, 24);
+}
+
+// prevent overflows by sending messages in chunks
+void delay_print(EHandle h_plr, array<string>@ messages, int chunkSize) {
+	float delay = 0;
+	
+	for (uint i = 0; i < messages.size(); i += chunkSize) {
+		int start = i;
+		int end = i + chunkSize;
+		
+		if (end > int(messages.size())) {
+			end = messages.size();
+		}
+		
+		g_Scheduler.SetTimeout("delay_print", delay, h_plr, @messages, start, end);
+		delay += 0.1f;
+	}
+}
+
+void delay_print(EHandle h_plr, array<string>@ messages, int start, int end) {
+	CBasePlayer @ plr = cast < CBasePlayer @ > (h_plr.GetEntity());
+	if (plr !is null) {
+		for (int i = start; i < end; i++) {
+			g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, messages[i]);
+		}
+	}
 }
 
 void printUserStat(CBasePlayer@ plr, int k, UserStat@ stat, bool isYou) {

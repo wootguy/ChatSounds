@@ -159,8 +159,6 @@ PlayerState@ getPlayerState(string steamId) {
 }
 
 void loadPersonalSoundLists() {
-    g_stats.resize(0);
-
     DateTime start = DateTime();
 
     File@ file = g_FileSystem.OpenFile(soundListsFile, OpenFile::READ);
@@ -214,8 +212,6 @@ void writePersonalSoundLists() {
 			if (state.soundList.size() == 0 and !state.micMode) {
 				continue;
 			}
-			
-			println("WRITE CUZ " + state.soundList.size() + " " + state.micMode);
 			
 			string line = fileSteamId + "\\" + (state.micMode ? "1" : "0") + "\\";
 			for (uint k = 0; k < state.soundList.size(); k++) {
@@ -328,8 +324,7 @@ void listsounds(CBasePlayer@ plr, const CCommand@ args) {
         g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, sMessage + "\n");
     }
 
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nThese sounds are always loaded.\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "Type '.listsounds2' to see extra sounds that can be selectively loaded.\n\n");
+    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nType '.listsounds2' to see extra sounds that can be selectively loaded.\n\n");
 }
 
 // sounds that need to be selected before using
@@ -356,6 +351,7 @@ void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
     }
 
     g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nThese sounds need to be selected with '.csload' before they can be used.\n");
+    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "Unloaded sounds can be previewed with the '.cs' command, or streamed by default with the '.csmic' command.\n");
     g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "Type '.listsounds' to see the list of sounds that are always loaded.\n\n");
 }
 
