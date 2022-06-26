@@ -231,6 +231,9 @@ void showSoundStats(CBasePlayer@ plr, string chatTrigger) {
         }
     
 		ChatSound@ sound = cast<ChatSound@>(g_SoundList[g_stats[i].chatTrigger]);
+		if (sound is null) {
+			continue;
+		}
 		
 		string posString = position;
 		if (position < 100) {

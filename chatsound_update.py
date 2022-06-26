@@ -12,6 +12,7 @@ sound_search_paths = [
 
 chatsound_cfg_path = os.path.join(sven_root_path, 'svencoop_addon\\scripts\\plugins\\cfg\\ChatSounds.txt')
 steam_voice_path = os.path.join(sven_root_path, 'svencoop_addon\\scripts\\plugins\\radio\\lib\\steam_voice.exe')
+output_root = os.path.join(sven_root_path, 'svencoop_addon\\scripts\\plugins\\ChatSounds\\micsounds')
 
 steamId = 0 # must be unique per sound or else multiple mic streams will conflict each other if played at the same time
 
@@ -27,7 +28,16 @@ with open(chatsound_cfg_path) as file:
 			if os.path.exists(sound_path):
 				break
 			
-		spk_path = sound_path.replace(".wav", ".spk")
+		spk_path = os.path.join(output_root, parts[1]).replace(".wav", ".spk")
+		delete_path = sound_path.replace(".wav", ".spk")
+		
+		if not os.path.exists(os.path.dirname(spk_path)):
+			os.makedirs(os.path.dirname(spk_path))
+		
+		try:
+			os.remove(delete_path)
+		except:
+			pass
 		
 		#if os.path.exists(spk_path):
 		#	continue

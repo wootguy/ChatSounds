@@ -7,6 +7,7 @@ const string g_SoundFile      = "scripts/plugins/cfg/ChatSounds.txt"; // permane
 const string g_extraSoundFile = "scripts/plugins/cfg/ChatSounds_extra.txt"; // sounds that players can choose to precache
 const string soundStatsFile   = "scripts/plugins/store/cs_stats.txt"; // .csstats
 const string soundListsFile   = "scripts/plugins/store/cs_lists.txt"; // personal sound lists
+const string g_sound_folder   = "scripts/plugins/ChatSounds/micsounds"; // path to sound files converted to NetworkMessage format
 const uint g_BaseDelay        = 6666;
 const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
@@ -17,13 +18,16 @@ class ChatSound {
 	bool alwaysPrecache;
 	
 	// for sounds that players need to select
+	string fpath_spk; // path to the mic audio file
 	bool isPrecached = false;
+	bool isStreaming = false; // prevent parallel loading
 	array<VoicePacket> previewData; // voice data for previewing the chatsound before it's loaded
 	
 	ChatSound() {}
 	
 	ChatSound(string fpath, bool alwaysPrecache) {
 		this.fpath = fpath;
+		this.fpath_spk = g_sound_folder + "/" + fpath.Replace(".wav", ".spk");
 		this.alwaysPrecache = alwaysPrecache;
 		
 		if (this.alwaysPrecache) {
@@ -39,6 +43,14 @@ class PlayerState {
 	int volume = 100;
 	int pitch = 100;
 }
+
+/* TODO: make program to convert wav->spk on demand so pitch shifting works over mic
+enum MicModes {
+	MICMODE_OFF, 			// don't ever use mic audio to play chatsounds
+	MICMODE_UNLOADED_ONLY,	// only use mic audio to play unloaded sounds
+	MICMODE_ALWAYS			// play all sounds on mic, even if loaded
+}
+*/
 
 uint g_Delay = g_BaseDelay;
 bool precached = false;
@@ -56,6 +68,7 @@ CClientCommand g_ListSounds("listsounds", "List all chat sounds", @listsoundscmd
 CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsounds2cmd);
 CClientCommand g_CSPreview("cs", "Chat sound preview", @cspreviewcmd);
 CClientCommand g_CSLoad("csload", "Chat sound loader", @csloadcmd);
+CClientCommand g_CSList("cslist", "Show your personal sounds", @listpersonalcmd);
 CClientCommand g_CSMic("csmic", "Toggle microphone sound mode", @csloadcmd);
 CClientCommand g_CSPitch("cspitch", "Sets the pitch at which your ChatSounds play (25-255)", @cspitch);
 CClientCommand g_CSStats("csstats", "Sound usage stats", @cs_stats);
@@ -252,6 +265,8 @@ HookReturnCode MapChange() {
 
 void ReadSounds() {
     g_SoundList.deleteAll();
+	g_normalSoundKeys.resize(0);
+	g_extraSoundKeys.resize(0);
 	
 	bool parsingExtraSounds = false;
 
@@ -279,8 +294,6 @@ void ReadSounds() {
 			
 			if (parsingExtraSounds) {
 				g_extraSoundKeys.insertLast(parsed[0]);
-				string spk_path = sound.fpath;
-				sound.previewData = load_mic_sound(spk_path.Replace(".wav", ".spk"));
 			} else {
 				g_normalSoundKeys.insertLast(parsed[0]);
 			}
@@ -329,8 +342,10 @@ void listsounds(CBasePlayer@ plr, const CCommand@ args) {
 
 // sounds that need to be selected before using
 void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nEXTRA SOUND TRIGGERS\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "------------------------\n");
+	array<string> lines;
+	
+    lines.insertLast("\nEXTRA SOUND TRIGGERS\n");
+    lines.insertLast("------------------------\n");
 
     string sMessage = "";
 
@@ -339,20 +354,22 @@ void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
 
         if (i % 5 == 0) {
             sMessage.Resize(sMessage.Length() -2);
-            g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, sMessage);
-            g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\n");
+            lines.insertLast(sMessage);
+            lines.insertLast("\n");
             sMessage = "";
         }
     }
 
     if (sMessage.Length() > 2) {
         sMessage.Resize(sMessage.Length() -2);
-        g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, sMessage + "\n");
+        lines.insertLast(sMessage + "\n");
     }
 
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "\nThese sounds need to be selected with '.csload' before they can be used.\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "Unloaded sounds can be previewed with the '.cs' command, or streamed by default with the '.csmic' command.\n");
-    g_PlayerFuncs.ClientPrint(plr, HUD_PRINTCONSOLE, "Type '.listsounds' to see the list of sounds that are always loaded.\n\n");
+    lines.insertLast("\nThese sounds need to be selected with '.csload' before they can be used.\n");
+    lines.insertLast("Unloaded sounds can be previewed with the '.cs' command, or streamed by default with the '.csmic' command.\n");
+    lines.insertLast("Type '.listsounds' to see the list of sounds that are always loaded.\n\n");
+
+	delay_print(EHandle(plr), lines, 24);
 }
 
 void cspreviewcmd(const CCommand@ pArgs) {
@@ -373,6 +390,88 @@ void listsoundscmd(const CCommand@ pArgs) {
 void listsounds2cmd(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     listsounds2(pPlayer, pArgs);
+}
+
+void listpersonalcmd(const CCommand@ pArgs) {
+    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
+    listpersonal(pPlayer, pArgs);
+}
+
+dictionary g_loadedSounds; // defined globally so anon function can see it
+void listpersonal(CBasePlayer@ plr, const CCommand@ args) {
+	showPersonalSounds(plr);
+	g_loadedSounds.deleteAll();
+	
+	for (int i = 1; i <= g_Engine.maxClients; i++) {
+		CBasePlayer@ p = g_PlayerFuncs.FindPlayerByIndex(i);
+		
+		if (p is null or !p.IsConnected()) {
+			continue;
+		}
+
+		PlayerState@ state = getPlayerState(p);
+		
+		for (uint k = 0; k < state.soundList.size(); k++) {
+			if (!g_SoundList.exists(state.soundList[k])) {
+				continue;
+			}
+			if (g_loadedSounds.exists(state.soundList[k])) {
+				array<string>@ loaders = cast<array<string>@>(g_loadedSounds[state.soundList[k]]);
+				loaders.insertLast(p.pev.netname);
+			} else {
+				array<string> loaders;
+				loaders.insertLast(p.pev.netname);
+				g_loadedSounds[state.soundList[k]] = loaders;
+			}
+		}
+	}
+	
+	array<string> loadedSoundKeys = g_loadedSounds.getKeys();
+	loadedSoundKeys.sort(function(a,b) {
+		return cast<array<string>@>(g_loadedSounds[a]).size() > cast<array<string>@>(g_loadedSounds[b]).size();
+	});
+	
+	array<string> printLines;
+	
+	printLines.insertLast("\nBelow are sounds favorited by active players.\n");
+    printLines.insertLast("\n     Sound               Users");
+    printLines.insertLast("\n--------------------------------------------\n");
+	
+	int position = 1;
+	for (uint i = 0; i < loadedSoundKeys.size(); i++) {
+		string posString = position;
+		if (position < 100) {
+            posString = " " + posString;
+        }
+        if (position < 10) {
+            posString = " " + posString;
+        }
+        position++;
+		
+		string line = posString + ") " + loadedSoundKeys[i];
+        
+        int padding = 20 - loadedSoundKeys[i].Length();
+        for (int k = 0; k < padding; k++)
+            line += " ";
+        
+		array<string>@ userNames = cast<array<string>@>(g_loadedSounds[loadedSoundKeys[i]]);
+		userNames.sortAsc();
+		string userStr;
+		
+		for (uint k = 0; k < userNames.size(); k++) {
+			string userName = userNames[k];
+			if (userName.Length() > 10) {
+				userName = userName.SubString(0, 9) + "-";
+			}
+			
+			userStr += (k > 0 ? ", " : "") + userNames[k];
+		}
+
+        line += userStr + "\n";
+        printLines.insertLast(line);
+	}
+	
+	delay_print(EHandle(plr), printLines, 12);
 }
 
 void cspitch(const CCommand@ pArgs) {
@@ -444,7 +543,7 @@ void player_say(CBaseEntity@ plr, string msg) {
     }
 } */
 
-void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound snd, float volume, float attenuation, int pitch) {
+void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd, float volume, float attenuation, int pitch) {
 	string speakerId = g_EngineFuncs.GetPlayerAuthId(speaker.edict());
 	speakerId = speakerId.ToLowercase();
 	
@@ -467,7 +566,7 @@ void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound snd,
 			if (snd.isPrecached) {
 				g_SoundSystem.PlaySound(speaker.edict(), channel, snd.fpath, localVol, attenuation, 0, pitch, plr.entindex());
 			} else if (state.micMode) {
-				play_mic_sound(EHandle(speaker), EHandle(plr), snd.previewData);
+				play_mic_sound(EHandle(speaker), EHandle(plr), snd);
 			}
 		}
 	}
@@ -506,7 +605,6 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 				}
 				
 				g_PlayerFuncs.SayText(pPlayer, msg + "\n");
-				//play_mic_sound(EHandle(pPlayer), chatsound.previewData);
 				
 				if (pitchOverride || pArguments.ArgC() == 1) {
                     pParams.ShouldHide = true;
@@ -616,6 +714,11 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 			csmic(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
+		else if (pArguments.ArgC() > 0 && soundArg == '.cslist') {
+            CBasePlayer@ pPlayer = pParams.GetPlayer();
+			listpersonal(pPlayer, pArguments);
+            pParams.ShouldHide = true;
+        }
     }
 
     return HOOK_CONTINUE;
@@ -704,12 +807,14 @@ void showPersonalSounds(CBasePlayer@ plr) {
 	array<string> soundList = getPersonalSoundList(plr);
 	soundList.sortAsc();
 	
-	string msg = "[ChatSounds] Your sounds: ";
+	string msg = "[ChatSounds] Your sounds (" + soundList.size() + "/" + MAX_PERSONAL_SOUNDS + "): ";
 	for (uint i = 0; i < soundList.size(); i++) {
 		msg += (i > 0 ? " " : "") + soundList[i];
 	}
 	
 	g_PlayerFuncs.SayText(plr, msg + "\n");
+	
+	
 }
 
 void csmic(CBasePlayer@ plr, const CCommand@ args) {
@@ -749,7 +854,7 @@ void cspreview(CBasePlayer@ plr, const CCommand@ args) {
 			g_SoundSystem.PlaySound(plr.edict(), CHAN_VOICE, chatsound.fpath, 1.0f, 0.4f, 0, 100, plr.entindex());
 			g_PlayerFuncs.SayText(plr, "[ChatSounds] Previewing '" + wantSound + "'. This sound is loaded.\n");
 		} else {
-			play_mic_sound(EHandle(plr), EHandle(plr), chatsound.previewData);
+			play_mic_sound(EHandle(plr), EHandle(plr), chatsound);
 			g_PlayerFuncs.SayText(plr, "[ChatSounds] Previewing '" + wantSound + "'. This sound is not loaded.\n");
 		}
 
