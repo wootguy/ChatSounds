@@ -179,7 +179,12 @@ void play_mic_sound(EHandle h_speaker, EHandle h_listener, ChatSound@ sound) {
 		sound.isStreaming = true;
 		stream_mic_sound_private(h_speaker, h_listener, 0, g_EngineFuncs.Time(), sound, file);
 	} else {
-		play_mic_sound_private(h_speaker, h_listener, sound.previewData, 0, g_EngineFuncs.Time());
+		if (sound.isStreaming) {
+			// wait a little for the packet buffer to fill up
+			g_Scheduler.SetTimeout("play_mic_sound_private", 0.1f, h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time()+0.1f);
+		} else {
+			play_mic_sound_private(h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time());
+		}
 	}
 }
 
@@ -206,9 +211,9 @@ void play_mic_sound_private(EHandle h_speaker, EHandle h_listener, array<VoicePa
 	}
 	
 	if (nextDelay < 0) {
-		play_mic_sound_private(h_speaker, h_listener, packets, packetNum, playback_start_time);
+		play_mic_sound_private(h_speaker, h_listener, @packets, packetNum, playback_start_time);
 	} else {
-		g_Scheduler.SetTimeout("play_mic_sound_private", nextDelay, h_speaker, h_listener, packets, packetNum, playback_start_time);
+		g_Scheduler.SetTimeout("play_mic_sound_private", nextDelay, h_speaker, h_listener, @packets, packetNum, playback_start_time);
 	}	
 }
 

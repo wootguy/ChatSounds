@@ -1,6 +1,6 @@
 #include "Stats"
 #include "MicSounds"
-#include "../peepeepoopoo/brap"
+#include "brap"
 
 // config
 const string g_SoundFile      = "scripts/plugins/cfg/ChatSounds.txt"; // permanently precached sounds
