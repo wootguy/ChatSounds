@@ -1,5 +1,16 @@
+#include "crc32"
 
 float g_packet_delay = 0.05f;
+
+// a packet that can be played up to 32 times in parallel
+class ComboPacket {
+	array<VoicePacket> packets;
+	
+	void send(CBasePlayer@ speaker, CBasePlayer@ listener) {
+		int comboId = speaker.entindex() % 32;
+		packets[comboId].send(speaker, listener);
+	}
+}
 
 class VoicePacket {
 	uint size = 0;
@@ -7,6 +18,36 @@ class VoicePacket {
 	array<string> sdata;
 	array<uint32> ldata;
 	array<uint8> data;
+	
+	VoicePacket() {}
+	
+	VoicePacket(array<uint8>@ inputBytes) {
+		// "compress" data for faster writing later
+		string sdat = "";
+		for (uint i = 0; i < inputBytes.size(); i++) {
+			uint8 bval = inputBytes[i];
+			data.insertLast(bval);
+			
+			// combine into 32bit ints for faster writing later
+			if (data.size() == 4) {
+				uint32 val = (data[3] << 24) + (data[2] << 16) + (data[1] << 8) + data[0];
+				ldata.insertLast(val);
+				data.resize(0);
+			}
+			
+			// combine into string for even faster writing later
+			if (bval == 0) {
+				sdata.insertLast(sdat);
+				ldata.resize(0);
+				data.resize(0);
+				sdat = "";
+			} else {
+				sdat += HEX_CODES[bval];
+			}
+		}
+		
+		size = inputBytes.size();
+	}
 	
 	void send(CBasePlayer@ speaker, CBasePlayer@ listener) {
 		bool send_reliable_packets = false; // TODO: load this setting from radio plugin?
@@ -108,8 +149,8 @@ File@ openMicSoundfile(string fpath) {
 }
 
 // returns a list of packets to be sent in delayed NetworkMessages
-array<VoicePacket> load_mic_sound(string fpath) {
-	array<VoicePacket> packets; 
+array<ComboPacket> load_mic_sound(string fpath) {
+	array<ComboPacket> packets; 
 	
 	File@ file = openMicSoundfile(fpath);
 	
@@ -133,38 +174,36 @@ array<VoicePacket> load_mic_sound(string fpath) {
 	return packets;
 }
 
-VoicePacket parse_mic_packet(string line) {
-	VoicePacket packet;
-		
-	string sdat = "";
+ComboPacket parse_mic_packet(string line) {
+	array<uint8> data; // original packet bytes, as read from file
 	
 	for (uint i = 0; i < line.Length()-1; i += 2) {
 		uint n1 = char_to_nibble[ uint(line[i]) ];
 		uint n2 = char_to_nibble[ uint(line[i + 1]) ];
 		uint8 bval = (n1 << 4) + n2;
-		packet.data.insertLast(bval);
-		
-		// combine into 32bit ints for faster writing later
-		if (packet.data.size() == 4) {
-			uint32 val = (packet.data[3] << 24) + (packet.data[2] << 16) + (packet.data[1] << 8) + packet.data[0];
-			packet.ldata.insertLast(val);
-			packet.data.resize(0);
-		}
-		
-		// combine into string for even faster writing later
-		if (bval == 0) {
-			packet.sdata.insertLast(sdat);
-			packet.ldata.resize(0);
-			packet.data.resize(0);
-			sdat = "";
-		} else {
-			sdat += HEX_CODES[bval];
-		}
-		
-		packet.size++;
+		data.insertLast(bval);
 	}
 	
-	return packet;
+	int sz = data.size();
+	
+	ComboPacket comboPacket;
+	
+	for (uint i = 0; i < 8; i++) {
+		data[0] = data[0] + 1; // increment steamid64 so that the packet can be played in parallel with others
+		
+		// get checksum for all bytes excluding the checksum bytes
+		uint32 crc32 = crc32_get(data, sz-4); 
+		data[sz-4] = (crc32 >> 0) & 0xff;
+		data[sz-3] = (crc32 >> 8) & 0xff;
+		data[sz-2] = (crc32 >> 16) & 0xff;
+		data[sz-1] = (crc32 >> 24) & 0xff;
+		
+		comboPacket.packets.insertLast(VoicePacket(data));
+	}
+	
+	println("PARSE " + line);
+	
+	return comboPacket;
 }
 
 void play_mic_sound(EHandle h_speaker, EHandle h_listener, ChatSound@ sound) {
@@ -181,7 +220,7 @@ void play_mic_sound(EHandle h_speaker, EHandle h_listener, ChatSound@ sound) {
 	} else {
 		if (sound.isStreaming) {
 			// wait a little for the packet buffer to fill up
-			g_Scheduler.SetTimeout("play_mic_sound_private", 0.1f, h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time()+0.1f);
+			g_Scheduler.SetTimeout("play_mic_sound_private", 0.2f, h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time()+0.2f);
 		} else {
 			play_mic_sound_private(h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time());
 		}
@@ -194,7 +233,7 @@ float calcNextPacketDelay(float playback_start_time, float packetNum) {
 	return (ideal_next_packet_time - serverTime) - g_Engine.frametime;
 }
 
-void play_mic_sound_private(EHandle h_speaker, EHandle h_listener, array<VoicePacket>@ packets, int packetNum, float playback_start_time) {	
+void play_mic_sound_private(EHandle h_speaker, EHandle h_listener, array<ComboPacket>@ packets, int packetNum, float playback_start_time) {	
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
 	CBasePlayer@ listener = cast<CBasePlayer@>(h_listener.GetEntity());
 	
@@ -233,7 +272,7 @@ void stream_mic_sound_private(EHandle h_speaker, EHandle h_listener, int packetN
 		return;
 	}
 	
-	VoicePacket packet = parse_mic_packet(line);
+	ComboPacket packet = parse_mic_packet(line);
 	sound.previewData.insertLast(packet); // save to sound file for faster playing next time
 
 	packet.send(speaker, listener);
