@@ -1,7 +1,6 @@
 #include "Stats"
 #include "MicSounds"
 #include "brap"
-#include "crc32"
 
 // config
 const string g_SoundFile      = "scripts/plugins/cfg/ChatSounds.txt"; // permanently precached sounds
@@ -22,7 +21,7 @@ class ChatSound {
 	string fpath_spk; // path to the mic audio file
 	bool isPrecached = false;
 	bool isStreaming = false; // prevent parallel loading
-	array<ComboPacket> previewData; // voice data for previewing the chatsound before it's loaded
+	array<VoicePacket> previewData; // voice data for previewing the chatsound before it's loaded
 	
 	ChatSound() {}
 	
@@ -86,7 +85,6 @@ void PluginInit() {
     g_Hooks.RegisterHook(Hooks::Player::ClientPutInServer, @ClientPutInServer);
     g_Hooks.RegisterHook( Hooks::Game::MapChange, @MapChange );
 
-	crc32_init();
     ReadSounds();
     loadUsageStats();
 	loadPersonalSoundLists();
