@@ -69,7 +69,7 @@ CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsound
 CClientCommand g_CSPreview("cs", "Chat sound preview", @cspreviewcmd);
 CClientCommand g_CSLoad("csload", "Chat sound loader", @csloadcmd);
 CClientCommand g_CSList("cslist", "Show your personal sounds", @listpersonalcmd);
-CClientCommand g_CSMic("csmic", "Toggle microphone sound mode", @csloadcmd);
+CClientCommand g_CSMic("csmic", "Toggle microphone sound mode", @csmiccmd);
 CClientCommand g_CSPitch("cspitch", "Sets the pitch at which your ChatSounds play (25-255)", @cspitch);
 CClientCommand g_CSStats("csstats", "Sound usage stats", @cs_stats);
 CClientCommand g_CSMute("csmute", "Mute sounds from player", @csmute);
@@ -246,6 +246,7 @@ void writePersonalSoundLists() {
 
 HookReturnCode MapChange() {
     writeUsageStats();
+	writePersonalSoundLists();
 	
 	g_last_map_players.resize(0);
 	
