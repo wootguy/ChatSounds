@@ -637,7 +637,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
                     play_chat_sound(pPlayer, CHAN_VOICE, chatsound, volume, attenuation, pitch);
                 }
 				
-				if (soundArg == 'toot' || soundArg == 'tooot' || soundArg == 'brap' || soundArg == 'tootrape' || soundArg == 'braprape') {
+				if (soundArg == 'toot' || soundArg == 'tooot' || soundArg == 'brap' || soundArg == 'tootrape' || soundArg == 'braprape' || soundArg == "bloodbrap" || soundArg == "bloodbraprape") {
 					do_brap(pPlayer, soundArg, pitch);
 				}
 				if (soundArg == 'sniff' || soundArg == 'snifff' || soundArg == 'sniffrape') {

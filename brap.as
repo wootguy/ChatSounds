@@ -216,7 +216,7 @@ void cloud_toot(EHandle h_plr, float spread, float baseSpeed, float speedMultMax
 	g_braps.insertLast(Brap(EHandle(brapSprite), EHandle(brapModel)));
 }
 
-void shit(EHandle h_plr, int scale) {
+void shit(EHandle h_plr, int scale, bool isBlood) {
 	CBaseEntity@ plr = h_plr;
 	if (plr is null) {
 		return;
@@ -228,7 +228,8 @@ void shit(EHandle h_plr, int scale) {
 		buttPos.z -= 35;
 	}
 	
-	te_bloodsprite(buttPos + g_Engine.v_forward*-4, "sprites/bloodspray.spr", "sprites/blood.spr", 22, scale);
+	int color = isBlood ? 70 : 22;
+	te_bloodsprite(buttPos + g_Engine.v_forward*-4, "sprites/bloodspray.spr", "sprites/blood.spr", color, scale);
 }
 
 void do_brap(CBasePlayer@ plr, string arg, float pitch) {
@@ -242,12 +243,12 @@ void do_brap(CBasePlayer@ plr, string arg, float pitch) {
 	CBaseEntity@ tootEnt = getTootEnt(plr);
 	
 	if (tootEnt.pev.waterlevel >= WATERLEVEL_WAIST) {		
-		if (arg == "brap") {
+		if (arg == "brap" || arg == "bloodbrap") {
 			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 16, EHandle(tootEnt), 4);
-			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 8);
-		} else if (arg == "braprape") {
+			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 8, arg == "bloodbrap");
+		} else if (arg == "braprape" || arg == "bloodbraprape") {
 			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 16, EHandle(tootEnt), 16);
-			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 32);
+			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 32, arg == "bloodbraprape");
 		} else if (arg == "toot") {
 			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 1, EHandle(tootEnt), 12);
 		} else if (arg == "tooot") {
@@ -256,12 +257,12 @@ void do_brap(CBasePlayer@ plr, string arg, float pitch) {
 			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 2, EHandle(tootEnt), 180);
 		}
 	} else {
-		if (arg == "brap") {
+		if (arg == "brap" || arg == "bloodbrap") {
 			g_Scheduler.SetInterval("cloud_toot", 0.1f*speed, 8, EHandle(tootEnt), 90.0f, 100.0f, 1.5f);
-			g_Scheduler.SetInterval("shit", 0.05f*speed, 20, EHandle(tootEnt), 8);
-		} else if (arg == "braprape") {
+			g_Scheduler.SetInterval("shit", 0.05f*speed, 20, EHandle(tootEnt), 8, arg == "bloodbrap");
+		} else if (arg == "braprape" || arg == "bloodbraprape") {
 			g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 15, EHandle(tootEnt), 360.0f, 150.0f, 2.0f);
-			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 32);
+			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 32, arg == "bloodbraprape");
 		} else if (arg == "toot") {
 			g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 0, 100.0f, 1.0f);
 		} else if (arg == "tooot") {
