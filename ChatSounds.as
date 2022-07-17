@@ -600,16 +600,12 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 				array<string>@ personalSoundList = getPersonalSoundList(pPlayer);
 				
 				if (personalSoundList.find(soundArg) != -1) {
-					msg += "Wait for a different map before using it.";
+					msg += "Wait for a different map before using it, or just use .csmic";
 				} else {
-					msg += "Request it using the '.csload' command.";
+					msg += "Request it using the .csload command, or just use .csmic";
 				}
 				
-				g_PlayerFuncs.SayText(pPlayer, msg + "\n");
-				
-				if (pitchOverride || pArguments.ArgC() == 1) {
-                    pParams.ShouldHide = true;
-                }
+				g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTNOTIFY, msg + "\n");
 				
 				return HOOK_CONTINUE;
 			}
@@ -832,7 +828,7 @@ void csmic(CBasePlayer@ plr, const CCommand@ args) {
 	if (newMode) {
 		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode enabled. Unloaded sounds will be streamed to you via microphone.\n");
 	} else {
-		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode disabled. Unloaded sounds must be selected to be heard.\n");
+		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode disabled. Unloaded sounds must now be loaded for you to hear them.\n");
 	}
 }
 
@@ -866,11 +862,12 @@ void cspreview(CBasePlayer@ plr, const CCommand@ args) {
 
 void csload(CBasePlayer@ plr, const CCommand@ args) {
 	if (args.ArgC() == 1) {
-		g_PlayerFuncs.SayText(plr, "[ChatSounds] Help for the .csload command:\n");
 		g_PlayerFuncs.SayText(plr, 'Say ".csload brap" to add the brap sound to your personal sound list.\n');
 		g_PlayerFuncs.SayText(plr, 'Say ".csload brap ting uhoh" to replace your sound list with the given sounds.\n');
-		g_PlayerFuncs.SayText(plr, 'Say ".cs brap" to preview a sound (only you can hear this).\n');
-		g_PlayerFuncs.SayText(plr, 'Say ".csmic" to play unloaded sounds via microphone.\n');
+		g_PlayerFuncs.SayText(plr, 'Say ".listsounds2" to see loadable sounds.\n');
+		g_PlayerFuncs.SayText(plr, 'Say ".cs brap" to preview a sound (no cooldown + only you can hear).\n');
+		g_PlayerFuncs.SayText(plr, 'Say ".csmic" to hear unloaded sounds via microphone.\n');
+		
 		g_PlayerFuncs.SayText(plr, 'Your personal sounds will load when a new map loads. Restarts don\'t count as a new map.\n');
 		return;
 	}
