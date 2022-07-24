@@ -590,6 +590,8 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 
             int pitch = state.pitch;
             const bool pitchOverride = isNumeric(pitchArg) && pArguments.ArgC() == 2;
+			const bool allowrelay = ( (!pitchOverride && pArguments.ArgC() >= 2) || (soundArg == 'yes!' || soundArg == 'no!') && pArguments.ArgC() == 1 ); // can't take care of pitch override for yes!/no! here
+                
             if (pitchOverride) {
                 pitch = clampPitch(atoi(pitchArg));
             }
@@ -607,6 +609,15 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 				
 				g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTNOTIFY, msg + "\n");
 				
+				// uhoh this code duplicated below
+				if (allowrelay)
+                    return HOOK_CONTINUE;
+                else if (pitchOverride)
+                    player_say(pPlayer, soundArgUpper); // hide the pitch modifier
+                else
+                    player_say(pPlayer, pParams.GetCommand());
+				
+				pParams.ShouldHide = true;
 				return HOOK_CONTINUE;
 			}
 
@@ -646,16 +657,12 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 
                 g_ChatTimes[idx] = t;
 
-                const bool allowrelay = ( (!pitchOverride && pArguments.ArgC() >= 2) || (soundArg == 'yes!' || soundArg == 'no!') && pArguments.ArgC() == 1 ); // can't take care of pitch override for yes!/no! here
-                if (allowrelay) {
+                if (allowrelay)
                     return HOOK_CONTINUE;
-                }
-                else if (pitchOverride) {
+                else if (pitchOverride)
                     player_say(pPlayer, soundArgUpper); // hide the pitch modifier
-                }
-                else {
+                else
                     player_say(pPlayer, pParams.GetCommand());
-                }
 
                 pParams.ShouldHide = true;
             }

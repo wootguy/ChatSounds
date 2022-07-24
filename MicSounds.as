@@ -221,10 +221,6 @@ void stream_mic_sound_private(EHandle h_speaker, EHandle h_listener, int packetN
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
 	CBasePlayer@ listener = cast<CBasePlayer@>(h_listener.GetEntity());
 	
-	if (speaker is null or !speaker.IsConnected() or listener is null or !listener.IsConnected()) {
-		return;
-	}
-	
 	string line;
 	file.ReadLine(line);
 	if (line.IsEmpty() or file.EOFReached()) {
@@ -236,7 +232,9 @@ void stream_mic_sound_private(EHandle h_speaker, EHandle h_listener, int packetN
 	VoicePacket packet = parse_mic_packet(line);
 	sound.previewData.insertLast(packet); // save to sound file for faster playing next time
 
-	packet.send(speaker, listener);
+	if (speaker !is null and speaker.IsConnected() and listener !is null and listener.IsConnected()) {
+		packet.send(speaker, listener);
+	}
 	
 	float nextDelay = calcNextPacketDelay(playback_start_time, packetNum);
 	
