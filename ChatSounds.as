@@ -7,27 +7,32 @@ const string g_SoundFile      = "scripts/plugins/cfg/ChatSounds.txt"; // permane
 const string g_extraSoundFile = "scripts/plugins/cfg/ChatSounds_extra.txt"; // sounds that players can choose to precache
 const string soundStatsFile   = "scripts/plugins/store/cs_stats.txt"; // .csstats
 const string soundListsFile   = "scripts/plugins/store/cs_lists.txt"; // personal sound lists
-const string g_sound_folder   = "scripts/plugins/ChatSounds/micsounds"; // path to sound files converted to NetworkMessage format
+const string g_spk_folder     = "scripts/plugins/temp"; // path to sound files converted to NetworkMessage format
+const string micsound_file    = "scripts/plugins/store/_tocs.txt";
 const uint g_BaseDelay        = 6666;
 const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
+const float CSMIC_SOUND_TIMEOUT = 1.0f; // wait this many seconds before giving up on waiting for a sound to convert
 /////////
 
+// For .csmic to work, run the steam_voice program with the following arguments:
+// "chatsounds" <path_to_micsound_file> <path_to_chatsound_txt> <path_to_Sven_Coop_folder>
+
 class ChatSound {
+	string trigger;
 	string fpath;
 	bool alwaysPrecache;
 	
 	// for sounds that players need to select
-	string fpath_spk; // path to the mic audio file
 	bool isPrecached = false;
 	bool isStreaming = false; // prevent parallel loading
 	array<VoicePacket> previewData; // voice data for previewing the chatsound before it's loaded
 	
 	ChatSound() {}
 	
-	ChatSound(string fpath, bool alwaysPrecache) {
+	ChatSound(string trigger, string fpath, bool alwaysPrecache) {
+		this.trigger = trigger;
 		this.fpath = fpath;
-		this.fpath_spk = g_sound_folder + "/" + fpath.Replace(".wav", ".spk");
 		this.alwaysPrecache = alwaysPrecache;
 		
 		if (this.alwaysPrecache) {
@@ -75,6 +80,7 @@ CClientCommand g_CSStats("csstats", "Sound usage stats", @cs_stats);
 CClientCommand g_CSMute("csmute", "Mute sounds from player", @csmute);
 CClientCommand g_CSVol("csvol", "Change sound volume for all players", @csvol);
 CClientCommand g_writecsstats("writecsstats", "Write sound usage stats", @writecsstats_cmd, ConCommandFlag::AdminOnly);
+CClientCommand g_csupdate("csupdate", "Force reload of sounds in steam_voice program", @csupdate, ConCommandFlag::AdminOnly);
 
 void PluginInit() {
     g_Module.ScriptInfo.SetAuthor("incognico + w00tguy");
@@ -291,7 +297,7 @@ void ReadSounds() {
             if (parsed.length() < 2)
                 continue;
 
-			ChatSound sound = ChatSound(parsed[1], !parsingExtraSounds);			
+			ChatSound sound = ChatSound(parsed[0], parsed[1], !parsingExtraSounds);			
 			
 			if (parsingExtraSounds) {
 				g_extraSoundKeys.insertLast(parsed[0]);
@@ -307,6 +313,8 @@ void ReadSounds() {
         g_normalSoundKeys.sortAsc();
         g_extraSoundKeys.sortAsc();
     }
+	
+	send_steam_voice_message("!RELOAD_SOUNDS");
 }
 
 const bool SoundsChanged() {
@@ -499,6 +507,12 @@ void csvol(const CCommand@ pArgs) {
     setvol(steamId, pArgs[1], pPlayer);
 }
 
+void csupdate(const CCommand@ pArgs) {
+    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
+    g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "Sounds reloading.");
+	send_steam_voice_message("!RELOAD_SOUNDS");
+}
+
 void csmiccmd(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     csmic(pPlayer, pArgs);
@@ -548,6 +562,8 @@ void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd
 	string speakerId = g_EngineFuncs.GetPlayerAuthId(speaker.edict());
 	speakerId = speakerId.ToLowercase();
 	
+	array<EHandle> micListeners;
+	
 	for (int i = 1; i <= g_Engine.maxClients; i++) {
 		CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
 		
@@ -567,9 +583,13 @@ void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd
 			if (snd.isPrecached) {
 				g_SoundSystem.PlaySound(speaker.edict(), channel, snd.fpath, localVol, attenuation, 0, pitch, plr.entindex());
 			} else if (state.micMode) {
-				play_mic_sound(EHandle(speaker), EHandle(plr), snd);
+				micListeners.insertLast(EHandle(plr));
 			}
 		}
+	}
+	
+	if (micListeners.size() > 0) {
+		play_mic_sound(EHandle(speaker), micListeners, snd, pitch);
 	}
 }
 
@@ -602,9 +622,9 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 				array<string>@ personalSoundList = getPersonalSoundList(pPlayer);
 				
 				if (personalSoundList.find(soundArg) != -1) {
-					msg += "Wait for a different map before using it, or just use .csmic";
+					msg += "Wait for a different map before using it, or enable .csmic";
 				} else {
-					msg += "Request it using the .csload command, or just use .csmic";
+					msg += "Request it using the .csload command, or enable .csmic";
 				}
 				
 				g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTNOTIFY, msg + "\n");
@@ -858,7 +878,7 @@ void cspreview(CBasePlayer@ plr, const CCommand@ args) {
 			g_SoundSystem.PlaySound(plr.edict(), CHAN_VOICE, chatsound.fpath, 1.0f, 0.4f, 0, 100, plr.entindex());
 			g_PlayerFuncs.SayText(plr, "[ChatSounds] Previewing '" + wantSound + "'. This sound is loaded.\n");
 		} else {
-			play_mic_sound(EHandle(plr), EHandle(plr), chatsound);
+			play_mic_sound(EHandle(plr), {EHandle(plr)}, chatsound, 100);
 			g_PlayerFuncs.SayText(plr, "[ChatSounds] Previewing '" + wantSound + "'. This sound is not loaded.\n");
 		}
 

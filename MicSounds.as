@@ -1,5 +1,5 @@
-
 float g_packet_delay = 0.05f;
+array<CScheduledFunction@> g_mic_timers(33);
 
 class VoicePacket {
 	uint size = 0;
@@ -167,25 +167,70 @@ VoicePacket parse_mic_packet(string line) {
 	return packet;
 }
 
-void play_mic_sound(EHandle h_speaker, EHandle h_listener, ChatSound@ sound) {
-	if (sound.previewData.size() == 0 and !sound.isStreaming) {
-		// sound hasn't been loaded yet. Stream the data instead of loading all at once so the server doesn't freeze
-		File@ file = openMicSoundfile(sound.fpath_spk);
+void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ sound, int pitch) {
+	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
+	int eidx = speaker.entindex();
+
+	if (g_mic_timers[eidx] !is null) {
+		g_Scheduler.RemoveTimer(g_mic_timers[eidx]);
+		@g_mic_timers[eidx] = null;
+	}
+
+	string spk_file = g_spk_folder + "/" + eidx + ".spk";
+	string spk_file_temp = g_spk_folder + "/" + eidx + "_temp.spk";
 	
-		if (file is null) {
+	File@ file = @g_FileSystem.OpenFile(spk_file, OpenFile::WRITE);	
+	
+	// delete the file and wait for python to recreate it with unique pitch and ID data
+	if (file !is null and file.IsOpen()) {
+		file.Remove();
+	}
+	
+	send_steam_voice_message(sound.trigger + " " + pitch + " " + eidx);
+	wait_mic_sound(h_speaker, h_listeners, spk_file, g_Engine.time);
+}
+
+void wait_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, string spkPath, float waitTimeStart) {
+	CBaseEntity@ speaker = h_speaker;
+	
+	if (speaker is null) {
+		return;
+	}
+	
+	File@ file = @g_FileSystem.OpenFile(spkPath, OpenFile::READ);	
+	
+	if (file !is null and file.IsOpen()) {
+		int size = file.GetSize();
+		if (size > 2048) { // wait for a few packets to be written in case the converter is slow
+			stream_mic_sound_private(h_speaker, h_listeners, 0, g_EngineFuncs.Time(), file);
 			return;
 		}
 		
-		sound.isStreaming = true;
-		stream_mic_sound_private(h_speaker, h_listener, 0, g_EngineFuncs.Time(), sound, file);
-	} else {
-		if (sound.isStreaming) {
-			// wait a little for the packet buffer to fill up
-			g_Scheduler.SetTimeout("play_mic_sound_private", 0.1f, h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time()+0.1f);
-		} else {
-			play_mic_sound_private(h_speaker, h_listener, @sound.previewData, 0, g_EngineFuncs.Time());
-		}
+		file.Close();
 	}
+	
+	float waitTime = g_Engine.time - waitTimeStart;
+	if (waitTime >= 0 and waitTime < CSMIC_SOUND_TIMEOUT) {
+		@g_mic_timers[speaker.entindex()] = @g_Scheduler.SetTimeout("wait_mic_sound", 0.0f, h_speaker, h_listeners, spkPath, waitTimeStart);
+	} else {
+		g_PlayerFuncs.ClientPrint(cast<CBasePlayer@>(speaker), HUD_PRINTNOTIFY, "[ChatSounds] Failed to play sound on mic.");
+	}
+}
+
+// send a message to the steam_voice program
+void send_steam_voice_message(string msg) {	
+	File@ file = g_FileSystem.OpenFile( micsound_file, OpenFile::APPEND );
+	
+	if (!file.IsOpen()) {
+		string text = "[ChatSounds] Failed to open: " + micsound_file + "\n";
+		println(text);
+		g_Log.PrintF(text);
+		return;
+	}
+	
+	print("[ChatSoundsOut] " + msg + "\n");
+	file.Write(msg + "\n");
+	file.Close();
 }
 
 float calcNextPacketDelay(float playback_start_time, float packetNum) {
@@ -194,45 +239,29 @@ float calcNextPacketDelay(float playback_start_time, float packetNum) {
 	return (ideal_next_packet_time - serverTime) - g_Engine.frametime;
 }
 
-void play_mic_sound_private(EHandle h_speaker, EHandle h_listener, array<VoicePacket>@ packets, int packetNum, float playback_start_time) {	
+void stream_mic_sound_private(EHandle h_speaker, array<EHandle>@ h_listeners, int packetNum, float playback_start_time, File@ file) {	
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
-	CBasePlayer@ listener = cast<CBasePlayer@>(h_listener.GetEntity());
-	
-	if (speaker is null or !speaker.IsConnected() or listener is null or !listener.IsConnected()) {
+	if (speaker is null or !speaker.IsConnected()) {
+		file.Close();
 		return;
 	}
-
-	packets[packetNum].send(speaker, listener);
-	
-	float nextDelay = calcNextPacketDelay(playback_start_time, packetNum);
-	
-	if (++packetNum >= int(packets.size())) {
-		return;
-	}
-	
-	if (nextDelay < 0) {
-		play_mic_sound_private(h_speaker, h_listener, @packets, packetNum, playback_start_time);
-	} else {
-		g_Scheduler.SetTimeout("play_mic_sound_private", nextDelay, h_speaker, h_listener, @packets, packetNum, playback_start_time);
-	}	
-}
-
-void stream_mic_sound_private(EHandle h_speaker, EHandle h_listener, int packetNum, float playback_start_time, ChatSound@ sound, File@ file) {	
-	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
-	CBasePlayer@ listener = cast<CBasePlayer@>(h_listener.GetEntity());
 	
 	string line;
 	file.ReadLine(line);
 	if (line.IsEmpty() or file.EOFReached()) {
 		file.Close();
-		sound.isStreaming = false;
 		return;
 	}
 	
 	VoicePacket packet = parse_mic_packet(line);
-	sound.previewData.insertLast(packet); // save to sound file for faster playing next time
-
-	if (speaker !is null and speaker.IsConnected() and listener !is null and listener.IsConnected()) {
+	
+	for (uint i = 0; i < h_listeners.size(); i++) {
+		CBasePlayer@ listener = cast<CBasePlayer@>(h_listeners[i].GetEntity());
+		
+		if (listener is null or !listener.IsConnected()) {
+			continue;
+		}
+		
 		packet.send(speaker, listener);
 	}
 	
@@ -241,8 +270,8 @@ void stream_mic_sound_private(EHandle h_speaker, EHandle h_listener, int packetN
 	++packetNum;
 	
 	if (nextDelay < 0) {
-		stream_mic_sound_private(h_speaker, h_listener, packetNum, playback_start_time, @sound, @file);
+		stream_mic_sound_private(h_speaker, h_listeners, packetNum, playback_start_time, @file);
 	} else {
-		g_Scheduler.SetTimeout("stream_mic_sound_private", nextDelay, h_speaker, h_listener, packetNum, playback_start_time, @sound, @file);
+		@g_mic_timers[speaker.entindex()] = @g_Scheduler.SetTimeout("stream_mic_sound_private", nextDelay, h_speaker, h_listeners, packetNum, playback_start_time, @file);
 	}	
 }
