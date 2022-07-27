@@ -167,9 +167,14 @@ VoicePacket parse_mic_packet(string line) {
 	return packet;
 }
 
-void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ sound, int pitch) {
+void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ sound, int pitch) {	
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
 	int eidx = speaker.entindex();
+	
+	if (g_pause_mic_audio) {
+		g_PlayerFuncs.ClientPrint(speaker, HUD_PRINTNOTIFY, "[ChatSounds] Mic audio is currently paused.");
+		return;
+	}
 
 	if (g_mic_timers[eidx] !is null) {
 		g_Scheduler.RemoveTimer(g_mic_timers[eidx]);
@@ -241,7 +246,7 @@ float calcNextPacketDelay(float playback_start_time, float packetNum) {
 
 void stream_mic_sound_private(EHandle h_speaker, array<EHandle>@ h_listeners, int packetNum, float playback_start_time, File@ file) {	
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
-	if (speaker is null or !speaker.IsConnected()) {
+	if (speaker is null or !speaker.IsConnected() or g_pause_mic_audio) {
 		file.Close();
 		return;
 	}

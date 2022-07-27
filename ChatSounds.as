@@ -68,6 +68,7 @@ array<string> g_extraSoundKeys;
 size_t filesize;
 string g_last_precache_map; // avoid precaching new sounds on restarted maps, or else fastdl will break
 array<string> g_last_map_players; // players that were present during the previous level change
+bool g_pause_mic_audio = false;
 
 CClientCommand g_ListSounds("listsounds", "List all chat sounds", @listsoundscmd);
 CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsounds2cmd);
@@ -81,6 +82,7 @@ CClientCommand g_CSMute("csmute", "Mute sounds from player", @csmute);
 CClientCommand g_CSVol("csvol", "Change sound volume for all players", @csvol);
 CClientCommand g_writecsstats("writecsstats", "Write sound usage stats", @writecsstats_cmd, ConCommandFlag::AdminOnly);
 CClientCommand g_csupdate("csupdate", "Force reload of sounds in steam_voice program", @csupdate, ConCommandFlag::AdminOnly);
+CClientCommand g_cspause("cspause", "Pause chatsound mic audio to fix lag", @cspause, ConCommandFlag::AdminOnly);
 
 void PluginInit() {
     g_Module.ScriptInfo.SetAuthor("incognico + w00tguy");
@@ -511,6 +513,18 @@ void csupdate(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "Sounds reloading.");
 	send_steam_voice_message("!RELOAD_SOUNDS");
+}
+
+void cspause(const CCommand@ pArgs) {
+    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
+   
+	g_pause_mic_audio = !g_pause_mic_audio;
+	
+	if (g_pause_mic_audio) {
+		g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "[ChatSounds] Mic audio paused.");
+	} else {
+		g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "[ChatSounds] Mic audio resumed.");
+	}
 }
 
 void csmiccmd(const CCommand@ pArgs) {
