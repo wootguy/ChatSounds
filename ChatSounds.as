@@ -47,6 +47,7 @@ class PlayerState {
 	bool micMode = false;
 	int volume = 100;
 	int pitch = 100;
+	Vector brapColor = Vector(200, 255, 200);
 }
 
 /* TODO: make program to convert wav->spk on demand so pitch shifting works over mic
@@ -755,6 +756,10 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 		else if (pArguments.ArgC() > 0 && soundArg == '.cslist') {
             CBasePlayer@ pPlayer = pParams.GetPlayer();
 			listpersonal(pPlayer, pArguments);
+            pParams.ShouldHide = true;
+        } else if (pArguments.ArgC() > 0 && soundArg == '.brapcolor') {
+            CBasePlayer@ pPlayer = pParams.GetPlayer();
+			brapcolor(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
     }

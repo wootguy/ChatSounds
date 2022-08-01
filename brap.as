@@ -30,6 +30,30 @@ const float BRAP_LIFE = 20.0f; // braps live for this long before being deleted
 const float BRAP_RENDER_AMT = 24.0f;
 const float BRAP_SPREAD_DIST = 16.0f; // braps will push each other away within this dist
 
+CClientCommand _brapcolor("brapcolor", "Set brap color", @brapcolor_cmd);
+
+void brapcolor_cmd(const CCommand@ args) {
+    CBasePlayer@ plr = g_ConCommandSystem.GetCurrentPlayer();
+	brapcolor(plr, args);
+}
+
+void brapcolor(CBasePlayer@ plr, const CCommand@ args) {
+	PlayerState@ state = getPlayerState(plr);
+	
+    if (args.ArgC() < 4) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, ".brapcolor requires 3 values for red, green, and blue (0-255).\n");
+	} else {
+		state.brapColor = Vector(
+			Math.clamp(0, 255, atoi(args[1])),
+			Math.clamp(0, 255, atoi(args[2])),
+			Math.clamp(0, 255, atoi(args[3]))
+		);
+	}
+	
+	string brapStr = "" + int(state.brapColor.x) + " " + int(state.brapColor.y) + " " + int(state.brapColor.z);
+	g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Your brap color is: " + brapStr + "\n");
+}
+
 void te_bubbles(Vector mins, Vector maxs, float height=256.0f, 
 	string sprite="sprites/bubble.spr", uint8 count=64, float speed=16.0f,
 	NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null)
@@ -167,10 +191,11 @@ void bubble_toot(EHandle h_plr, int power) {
 }
 
 void cloud_toot(EHandle h_plr, float spread, float baseSpeed, float speedMultMax) {
-	CBaseEntity@ plr = h_plr;
+	CBasePlayer@ plr = cast<CBasePlayer@>(h_plr.GetEntity());
 	if (plr is null) {
 		return;
 	}
+	PlayerState@ state = getPlayerState(plr);
 	
 	float speed = baseSpeed * Math.RandomFloat(0.8f, speedMultMax);
 	Vector buttPos = plr.pev.origin;
@@ -207,7 +232,7 @@ void cloud_toot(EHandle h_plr, float spread, float baseSpeed, float speedMultMax
 	keys["model"] = brap_sprites[Math.RandomLong(0, brap_sprites.size()-1)];
 	keys["rendermode"] = "5";
 	keys["renderamt"] = "" + BRAP_RENDER_AMT;
-	keys["rendercolor"] = "200 255 200";
+	keys["rendercolor"] = state.brapColor.ToString();
 	keys["scale"] =  "0.01";
 	CBaseEntity@ brapSprite = g_EntityFuncs.CreateEntity("env_sprite", keys, true);
 	brapSprite.pev.movetype = MOVETYPE_FOLLOW;
