@@ -48,6 +48,7 @@ class PlayerState {
 	int volume = 100;
 	int pitch = 100;
 	Vector brapColor = Vector(200, 255, 200);
+	bool reliablePackets = false; // helps with lossy connections
 }
 
 /* TODO: make program to convert wav->spk on demand so pitch shifting works over mic
@@ -75,6 +76,7 @@ CClientCommand g_ListSounds("listsounds", "List all chat sounds", @listsoundscmd
 CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsounds2cmd);
 CClientCommand g_CSPreview("cs", "Chat sound preview", @cspreviewcmd);
 CClientCommand g_CSLoad("csload", "Chat sound loader", @csloadcmd);
+CClientCommand g_CSUnload("csunload", "Chat sound loader", @csunloadcmd);
 CClientCommand g_CSList("cslist", "Show your personal sounds", @listpersonalcmd);
 CClientCommand g_CSMic("csmic", "Toggle microphone sound mode", @csmiccmd);
 CClientCommand g_CSPitch("cspitch", "Sets the pitch at which your ChatSounds play (25-255)", @cspitch);
@@ -84,6 +86,7 @@ CClientCommand g_CSVol("csvol", "Change sound volume for all players", @csvol);
 CClientCommand g_writecsstats("writecsstats", "Write sound usage stats", @writecsstats_cmd, ConCommandFlag::AdminOnly);
 CClientCommand g_csupdate("csupdate", "Force reload of sounds in steam_voice program", @csupdate, ConCommandFlag::AdminOnly);
 CClientCommand g_cspause("cspause", "Pause chatsound mic audio to fix lag", @cspause, ConCommandFlag::AdminOnly);
+CClientCommand g_csreliable("csreliable", "Reliable packets for unloaded sounds", @csreliable);
 
 void PluginInit() {
     g_Module.ScriptInfo.SetAuthor("incognico + w00tguy");
@@ -394,6 +397,11 @@ void csloadcmd(const CCommand@ pArgs) {
     csload(pPlayer, pArgs);
 }
 
+void csunloadcmd(const CCommand@ pArgs) {
+    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
+    csunload(pPlayer, pArgs);
+}
+
 void listsoundscmd(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     listsounds(pPlayer, pArgs);
@@ -528,6 +536,18 @@ void cspause(const CCommand@ pArgs) {
 	}
 }
 
+void csreliable(const CCommand@ pArgs) {
+    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
+   
+	PlayerState@ state = getPlayerState(pPlayer);
+	state.reliablePackets = !state.reliablePackets;
+	if (pArgs.ArgC() > 1) {
+		state.reliablePackets = atoi(pArgs[1]) != 0;
+	}
+	
+	g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
+}
+            
 void csmiccmd(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     csmic(pPlayer, pArgs);
@@ -731,6 +751,21 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 			csload(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
+		else if (pArguments.ArgC() > 0 && soundArg == '.csunload') {
+            CBasePlayer@ pPlayer = pParams.GetPlayer();
+			csunload(pPlayer, pArguments);
+            pParams.ShouldHide = true;
+        }
+		else if (pArguments.ArgC() > 0 && soundArg == '.csreliable') {
+            CBasePlayer@ pPlayer = pParams.GetPlayer();
+			PlayerState@ state = getPlayerState(pPlayer);
+			state.reliablePackets = !state.reliablePackets;
+			if (pArguments.ArgC() > 1) {
+				state.reliablePackets = atoi(pArguments[1]) != 0;
+			}
+			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
+            pParams.ShouldHide = true;
+        }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cs') {
             CBasePlayer@ pPlayer = pParams.GetPlayer();
 			cspreview(pPlayer, pArguments);
@@ -757,7 +792,8 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
             CBasePlayer@ pPlayer = pParams.GetPlayer();
 			listpersonal(pPlayer, pArguments);
             pParams.ShouldHide = true;
-        } else if (pArguments.ArgC() > 0 && soundArg == '.brapcolor') {
+        }
+		else if (pArguments.ArgC() > 0 && soundArg == '.brapcolor') {
             CBasePlayer@ pPlayer = pParams.GetPlayer();
 			brapcolor(pPlayer, pArguments);
             pParams.ShouldHide = true;
@@ -844,6 +880,21 @@ void csloadMenuCallback(CTextMenu@ menu, CBasePlayer@ plr, int page, const CText
 	removePersonalSound(plr, parts[0]);
 	addPersonalSound(plr, parts[1]);
 	showPersonalSounds(plr);
+}
+
+void csunloadMenuCallback(CTextMenu@ menu, CBasePlayer@ plr, int page, const CTextMenuItem@ item) {
+	if (item is null or plr is null) {
+		return;
+	}
+	
+	string replaceStr;
+	item.m_pUserData.retrieve(replaceStr);
+	
+	array<string> parts = replaceStr.Split(",");
+	
+	removePersonalSound(plr, replaceStr);
+	g_PlayerFuncs.SayText(plr, "[ChatSounds] Unloaded " + replaceStr + "\n");
+	g_Scheduler.SetTimeout("open_unload_menu", 0.0f, EHandle(plr));
 }
 
 void showPersonalSounds(CBasePlayer@ plr) {
@@ -978,6 +1029,37 @@ void csload(CBasePlayer@ plr, const CCommand@ args) {
 	}
 	
 	showPersonalSounds(plr);
+}
+
+void csunload(CBasePlayer@ plr, const CCommand@ args) {	
+	open_unload_menu(EHandle(plr));
+}
+
+void open_unload_menu(EHandle h_plr) {
+	CBasePlayer@ plr = cast<CBasePlayer@>(h_plr.GetEntity());
+	if (plr is null) {
+		return;
+	}
+	
+	array<string> soundList = getPersonalSoundList(plr);
+		
+	if (soundList.size() == 0) {
+		g_PlayerFuncs.SayText(plr, "[ChatSounds] You have no personal sounds to unload.\n");
+		return;
+	}	
+	
+	int eidx = plr.entindex();
+	
+	@g_menus[eidx] = CTextMenu(@csunloadMenuCallback);
+	g_menus[eidx].SetTitle("\\ySelect a sound to unload:");
+	
+	soundList.sortAsc();
+	for (uint i = 0; i < soundList.size(); i++) {
+		g_menus[eidx].AddItem("\\w" + soundList[i] + "\\y", any(soundList[i]));
+	}
+	
+	g_menus[eidx].Register();
+	g_menus[eidx].Open(0, 0, plr);
 }
 
 void setpitch(const string steamId, const string val, CBasePlayer@ pPlayer) {

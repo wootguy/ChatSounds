@@ -9,7 +9,7 @@ class VoicePacket {
 	array<uint8> data;
 	
 	void send(CBasePlayer@ speaker, CBasePlayer@ listener) {
-		bool send_reliable_packets = false; // TODO: load this setting from radio plugin?
+		bool send_reliable_packets = getPlayerState(listener).reliablePackets;
 	
 		NetworkMessageDest sendMode = send_reliable_packets ? MSG_ONE : MSG_ONE_UNRELIABLE;
 		
