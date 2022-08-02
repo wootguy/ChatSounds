@@ -190,22 +190,39 @@ void bubble_toot(EHandle h_plr, int power) {
 	}
 }
 
-void cloud_toot(EHandle h_plr, float spread, float baseSpeed, float speedMultMax) {
-	CBasePlayer@ plr = cast<CBasePlayer@>(h_plr.GetEntity());
-	if (plr is null) {
+void cloud_toot(EHandle h_ent, float spread, float baseSpeed, float speedMultMax) {
+	CBaseEntity@ ent = h_ent;
+	CBasePlayer@ plr = cast<CBasePlayer@>(ent);
+	if (ent is null) {
 		return;
 	}
-	PlayerState@ state = getPlayerState(plr);
+	
+	if (plr is null and ent.pev.classname == "deadplayer") {
+		CustomKeyvalues@ pCustom = ent.GetCustomKeyvalues();
+		CustomKeyvalue ownerKey( pCustom.GetKeyvalue( "$i_hipoly_owner" ) );
+		
+		if (ownerKey.Exists()) {
+			@plr = @g_PlayerFuncs.FindPlayerByIndex(ownerKey.GetInteger());
+		}
+	}
+	
+	Vector brapColor = Vector(200, 255, 200);
+	if (plr !is null) {
+		PlayerState@ state = getPlayerState(plr);
+		brapColor = state.brapColor;
+	}
+	
+	
 	
 	float speed = baseSpeed * Math.RandomFloat(0.8f, speedMultMax);
-	Vector buttPos = plr.pev.origin;
-	Vector angles = plr.pev.v_angle;
+	Vector buttPos = ent.pev.origin;
+	Vector angles = ent.pev.v_angle;
 	angles.x = 0;
 	Math.MakeVectors(angles);
 	Vector dir = g_Engine.v_forward;
 	dir = spreadDir(dir, spread) * -speed;
 	
-	if (!plr.IsAlive()) {
+	if (!ent.IsAlive()) {
 		buttPos.z -= 35;
 		float u = Math.RandomFloat(0, 1);
 		float v = Math.RandomFloat(0, 1);
@@ -232,7 +249,7 @@ void cloud_toot(EHandle h_plr, float spread, float baseSpeed, float speedMultMax
 	keys["model"] = brap_sprites[Math.RandomLong(0, brap_sprites.size()-1)];
 	keys["rendermode"] = "5";
 	keys["renderamt"] = "" + BRAP_RENDER_AMT;
-	keys["rendercolor"] = state.brapColor.ToString();
+	keys["rendercolor"] = brapColor.ToString();
 	keys["scale"] =  "0.01";
 	CBaseEntity@ brapSprite = g_EntityFuncs.CreateEntity("env_sprite", keys, true);
 	brapSprite.pev.movetype = MOVETYPE_FOLLOW;
@@ -266,6 +283,9 @@ void do_brap(CBasePlayer@ plr, string arg, float pitch) {
 	float speed = (100.0f/pitch);
 	
 	CBaseEntity@ tootEnt = getTootEnt(plr);
+	if (tootEnt is null) {
+		return;
+	}
 	
 	if (tootEnt.pev.waterlevel >= WATERLEVEL_WAIST) {		
 		if (arg == "brap" || arg == "bloodbrap") {
