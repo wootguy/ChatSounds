@@ -191,7 +191,7 @@ void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ s
 		file.Remove();
 	}
 	
-	send_steam_voice_message(sound.trigger + " " + pitch + " " + eidx);
+	send_steam_voice_message(sound.trigger + " " + pitch + " " + CSMIC_VOLUME + " " + eidx);
 	wait_mic_sound(h_speaker, h_listeners, spk_file, g_Engine.time);
 }
 

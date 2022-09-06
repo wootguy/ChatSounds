@@ -13,6 +13,7 @@ const uint g_BaseDelay        = 6666;
 const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
 const float CSMIC_SOUND_TIMEOUT = 1.0f; // wait this many seconds before giving up on waiting for a sound to convert
+const float CSMIC_VOLUME = 15; // global volume setting for sounds played over mic, 15 = 100% volume of normal sounds
 /////////
 
 // For .csmic to work, run the steam_voice program with the following arguments:
