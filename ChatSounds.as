@@ -13,7 +13,7 @@ const uint g_BaseDelay        = 6666;
 const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
 const float CSMIC_SOUND_TIMEOUT = 1.0f; // wait this many seconds before giving up on waiting for a sound to convert
-const float CSMIC_VOLUME = 15; // global volume setting for sounds played over mic, 15 = 100% volume of normal sounds
+const float CSMIC_VOLUME = 22; // global volume setting for sounds played over mic, 15 = 100% volume of normal sounds
 /////////
 
 // For .csmic to work, run the steam_voice program with the following arguments:
@@ -45,14 +45,15 @@ class ChatSound {
 class PlayerState {
 	array<string> soundList;
 	array<string> muteList;
-	bool micMode = false;
+	bool micMode = true;
 	int volume = 100;
 	int pitch = 100;
 	Vector brapColor = Vector(200, 255, 200);
 	bool reliablePackets = false; // helps with lossy connections
+	float lastLaggyCmd = 0; // for cooldowns on commands that could lag the serber to death if spammed
 }
 
-/* TODO: make program to convert wav->spk on demand so pitch shifting works over mic
+/*
 enum MicModes {
 	MICMODE_OFF, 			// don't ever use mic audio to play chatsounds
 	MICMODE_UNLOADED_ONLY,	// only use mic audio to play unloaded sounds
@@ -360,6 +361,15 @@ void listsounds(CBasePlayer@ plr, const CCommand@ args) {
 void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
 	array<string> lines;
 	
+	PlayerState@ state = getPlayerState(plr);
+	
+	float delta = g_Engine.time - state.lastLaggyCmd;
+	if (delta < 5 and delta >= 0) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Wait a few seconds before using that command.\n");
+		return;
+	}
+	state.lastLaggyCmd = g_Engine.time;
+	
     lines.insertLast("\nEXTRA SOUND TRIGGERS\n");
     lines.insertLast("------------------------\n");
 
@@ -420,8 +430,16 @@ void listpersonalcmd(const CCommand@ pArgs) {
 
 dictionary g_loadedSounds; // defined globally so anon function can see it
 void listpersonal(CBasePlayer@ plr, const CCommand@ args) {
+	PlayerState@ stateCaller = getPlayerState(plr);
+	float delta = g_Engine.time - stateCaller.lastLaggyCmd;
+	if (delta < 3 and delta >= 0) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Wait a few seconds before using that command.\n");
+		return;
+	}
+	stateCaller.lastLaggyCmd = g_Engine.time;
+	
 	showPersonalSounds(plr);
-	g_loadedSounds.deleteAll();
+	g_loadedSounds.deleteAll();	
 	
 	for (int i = 1; i <= g_Engine.maxClients; i++) {
 		CBasePlayer@ p = g_PlayerFuncs.FindPlayerByIndex(i);
@@ -448,9 +466,12 @@ void listpersonal(CBasePlayer@ plr, const CCommand@ args) {
 	}
 	
 	array<string> loadedSoundKeys = g_loadedSounds.getKeys();
-	loadedSoundKeys.sort(function(a,b) {
-		return cast<array<string>@>(g_loadedSounds[a]).size() > cast<array<string>@>(g_loadedSounds[b]).size();
-	});
+	if (loadedSoundKeys.size() > 0) {
+		loadedSoundKeys.sort(function(a,b) {
+			return cast<array<string>@>(g_loadedSounds[a]).size() > cast<array<string>@>(g_loadedSounds[b]).size();
+		});
+	}
+	
 	
 	array<string> printLines;
 	
@@ -935,6 +956,14 @@ void cspreview(CBasePlayer@ plr, const CCommand@ args) {
 		g_PlayerFuncs.SayText(plr, "[ChatSounds] Type the name of a sound after '.cs' to preview it. Only you can hear this.\n");
 		return;
 	}
+	
+	PlayerState@ state = getPlayerState(plr);
+	float delta = g_Engine.time - state.lastLaggyCmd;
+	if (delta < 3 and delta >= 0) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Wait a few seconds before using that command.\n");
+		return;
+	}
+	state.lastLaggyCmd = g_Engine.time;
 	
 	string wantSound = args[1];
 	wantSound = wantSound.ToLowercase();
