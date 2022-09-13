@@ -207,6 +207,14 @@ void loadUsageStats() {
 }
 
 void showSoundStats(CBasePlayer@ plr, string chatTrigger) {
+	PlayerState@ state = getPlayerState(plr);
+	float delta = g_Engine.time - state.lastLaggyCmd;
+	if (delta < 10 and delta >= 0) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Wait a few seconds before using that command.\n");
+		return;
+	}
+	state.lastLaggyCmd = g_Engine.time;
+	
     if (chatTrigger.Length() > 0) {
         showSoundStats_singleSound(plr, chatTrigger);
         return;
