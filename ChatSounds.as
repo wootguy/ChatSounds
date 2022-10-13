@@ -51,6 +51,7 @@ class PlayerState {
 	Vector brapColor = Vector(200, 255, 200);
 	bool reliablePackets = false; // helps with lossy connections
 	float lastLaggyCmd = 0; // for cooldowns on commands that could lag the serber to death if spammed
+	uint lastStopsound = 0; // stop mic sounds with ids less than this
 }
 
 /*
@@ -73,6 +74,7 @@ size_t filesize;
 string g_last_precache_map; // avoid precaching new sounds on restarted maps, or else fastdl will break
 array<string> g_last_map_players; // players that were present during the previous level change
 bool g_pause_mic_audio = false;
+uint g_micsound_id = 0; // used with .cstop.
 
 CClientCommand g_ListSounds("listsounds", "List all chat sounds", @listsoundscmd);
 CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsounds2cmd);
@@ -89,6 +91,7 @@ CClientCommand g_writecsstats("writecsstats", "Write sound usage stats", @writec
 CClientCommand g_csupdate("csupdate", "Force reload of sounds in steam_voice program", @csupdate, ConCommandFlag::AdminOnly);
 CClientCommand g_cspause("cspause", "Pause chatsound mic audio to fix lag", @cspause, ConCommandFlag::AdminOnly);
 CClientCommand g_csreliable("csreliable", "Reliable packets for unloaded sounds", @csreliable);
+CClientCommand g_cstop("cstop", "Stop playing mic sounds", @cstop);
 
 void PluginInit() {
     g_Module.ScriptInfo.SetAuthor("incognico + w00tguy");
@@ -569,7 +572,16 @@ void csreliable(const CCommand@ pArgs) {
 	
 	g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
 }
-            
+
+void cstop(const CCommand@ pArgs) {
+    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
+   
+	PlayerState@ state = getPlayerState(pPlayer);
+	state.lastStopsound = g_micsound_id;
+	
+	g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTCONSOLE, "[ChatSounds] Stopping mic sounds\n");
+}
+
 void csmiccmd(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     csmic(pPlayer, pArgs);
@@ -786,6 +798,13 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 				state.reliablePackets = atoi(pArguments[1]) != 0;
 			}
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
+            pParams.ShouldHide = true;
+        }
+		else if (pArguments.ArgC() > 0 && soundArg == '.cstop') {
+            CBasePlayer@ pPlayer = pParams.GetPlayer();
+			PlayerState@ state = getPlayerState(pPlayer);
+			state.lastStopsound = g_micsound_id;
+			g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTCONSOLE, "[ChatSounds] Stopping mic sounds\n");
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cs') {

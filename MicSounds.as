@@ -8,8 +8,14 @@ class VoicePacket {
 	array<uint32> ldata;
 	array<uint8> data;
 	
-	void send(CBasePlayer@ speaker, CBasePlayer@ listener) {
-		bool send_reliable_packets = getPlayerState(listener).reliablePackets;
+	void send(CBasePlayer@ speaker, CBasePlayer@ listener, uint soundId) {
+		PlayerState@ state = getPlayerState(listener);
+		
+		if (state.lastStopsound > soundId) {
+			return;
+		}
+		
+		bool send_reliable_packets = state.reliablePackets;
 	
 		NetworkMessageDest sendMode = send_reliable_packets ? MSG_ONE : MSG_ONE_UNRELIABLE;
 		
@@ -192,10 +198,10 @@ void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ s
 	}
 	
 	send_steam_voice_message(sound.trigger + " " + pitch + " " + CSMIC_VOLUME + " " + eidx);
-	wait_mic_sound(h_speaker, h_listeners, spk_file, g_Engine.time);
+	wait_mic_sound(h_speaker, h_listeners, spk_file, g_Engine.time, g_micsound_id++);
 }
 
-void wait_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, string spkPath, float waitTimeStart) {
+void wait_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, string spkPath, float waitTimeStart, uint playId) {
 	CBaseEntity@ speaker = h_speaker;
 	
 	if (speaker is null) {
@@ -207,7 +213,7 @@ void wait_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, string spkPa
 	if (file !is null and file.IsOpen()) {
 		int size = file.GetSize();
 		if (size > 2048) { // wait for a few packets to be written in case the converter is slow
-			stream_mic_sound_private(h_speaker, h_listeners, 0, g_EngineFuncs.Time(), file);
+			stream_mic_sound_private(h_speaker, h_listeners, 0, g_EngineFuncs.Time(), file, playId);
 			return;
 		}
 		
@@ -216,7 +222,7 @@ void wait_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, string spkPa
 	
 	float waitTime = g_Engine.time - waitTimeStart;
 	if (waitTime >= 0 and waitTime < CSMIC_SOUND_TIMEOUT) {
-		@g_mic_timers[speaker.entindex()] = @g_Scheduler.SetTimeout("wait_mic_sound", 0.0f, h_speaker, h_listeners, spkPath, waitTimeStart);
+		@g_mic_timers[speaker.entindex()] = @g_Scheduler.SetTimeout("wait_mic_sound", 0.0f, h_speaker, h_listeners, spkPath, waitTimeStart, playId);
 	} else {
 		g_PlayerFuncs.ClientPrint(cast<CBasePlayer@>(speaker), HUD_PRINTNOTIFY, "[ChatSounds] Failed to play sound on mic.");
 	}
@@ -244,7 +250,7 @@ float calcNextPacketDelay(float playback_start_time, float packetNum) {
 	return (ideal_next_packet_time - serverTime) - g_Engine.frametime;
 }
 
-void stream_mic_sound_private(EHandle h_speaker, array<EHandle>@ h_listeners, int packetNum, float playback_start_time, File@ file) {	
+void stream_mic_sound_private(EHandle h_speaker, array<EHandle>@ h_listeners, int packetNum, float playback_start_time, File@ file, uint playId) {	
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
 	if (speaker is null or !speaker.IsConnected() or g_pause_mic_audio) {
 		file.Close();
@@ -267,7 +273,7 @@ void stream_mic_sound_private(EHandle h_speaker, array<EHandle>@ h_listeners, in
 			continue;
 		}
 		
-		packet.send(speaker, listener);
+		packet.send(speaker, listener, playId);
 	}
 	
 	float nextDelay = calcNextPacketDelay(playback_start_time, packetNum);
@@ -275,8 +281,8 @@ void stream_mic_sound_private(EHandle h_speaker, array<EHandle>@ h_listeners, in
 	++packetNum;
 	
 	if (nextDelay < 0) {
-		stream_mic_sound_private(h_speaker, h_listeners, packetNum, playback_start_time, @file);
+		stream_mic_sound_private(h_speaker, h_listeners, packetNum, playback_start_time, @file, playId);
 	} else {
-		@g_mic_timers[speaker.entindex()] = @g_Scheduler.SetTimeout("stream_mic_sound_private", nextDelay, h_speaker, h_listeners, packetNum, playback_start_time, @file);
+		@g_mic_timers[speaker.entindex()] = @g_Scheduler.SetTimeout("stream_mic_sound_private", nextDelay, h_speaker, h_listeners, packetNum, playback_start_time, @file, playId);
 	}	
 }
