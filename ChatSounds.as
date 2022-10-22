@@ -52,6 +52,9 @@ class PlayerState {
 	bool reliablePackets = false; // helps with lossy connections
 	float lastLaggyCmd = 0; // for cooldowns on commands that could lag the serber to death if spammed
 	uint lastStopsound = 0; // stop mic sounds with ids less than this
+	
+	string lastSound;
+	SOUND_CHANNEL lastSoundChan;
 }
 
 /*
@@ -115,6 +118,19 @@ void PluginExit() {
 	brap_unload();
 }
 
+void kiss_effect(EHandle h_plr, int kissLeft) {
+	CBasePlayer@ plr = cast<CBasePlayer@>(h_plr.GetEntity());
+	if (plr is null or !plr.IsConnected()) {
+		return;
+	}
+	
+	te_playersprites(plr, "sprites/heart.spr", 2);
+
+	if (kissLeft > 0) {
+		g_Scheduler.SetTimeout("kiss_effect", 0.2f, h_plr, kissLeft-1);
+	}
+}
+
 void MapInit() {
     if (SoundsChanged())
         ReadSounds();
@@ -140,9 +156,10 @@ void MapInit() {
     }
 
     for (uint i = 0; i < g_sprites.length(); ++i) {
-        g_Game.PrecacheGeneric(g_sprites[i]);
         g_Game.PrecacheModel(g_sprites[i]);
     }
+	
+	g_Game.PrecacheModel("sprites/heart.spr");
 
     precached = true;
 	
@@ -651,6 +668,8 @@ void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd
 		if (localVol > 0) {
 			if (snd.isPrecached) {
 				g_SoundSystem.PlaySound(speaker.edict(), channel, snd.fpath, localVol, attenuation, 0, pitch, plr.entindex());
+				state.lastSound = snd.fpath;
+				state.lastSoundChan = channel;
 			} else if (state.micMode) {
 				micListeners.insertLast(EHandle(plr));
 			}
@@ -660,6 +679,19 @@ void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd
 	if (micListeners.size() > 0) {
 		play_mic_sound(EHandle(speaker), micListeners, snd, pitch);
 	}
+}
+
+void te_playersprites(CBasePlayer@ target, 
+	string sprite="sprites/bubble.spr", uint8 count=16,
+	NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null)
+{
+	NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);
+	m.WriteByte(TE_PLAYERSPRITES);
+	m.WriteShort(target.entindex());
+	m.WriteShort(g_EngineFuncs.ModelIndex(sprite));
+	m.WriteByte(count);
+	m.WriteByte(0); // "size variation" - has no effect
+	m.End();
 }
 
 HookReturnCode ClientSay(SayParameters@ pParams) {
@@ -735,6 +767,25 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
                     const float volume      = 1.0f; // increased volume from .75 since converting stereo sounds to mono made them quiet
                     const float attenuation = 0.4f; // less = bigger sound range
                     play_chat_sound(pPlayer, CHAN_VOICE, chatsound, volume, attenuation, pitch);
+					
+					if (soundArg == 'kiss') {
+						kiss_effect(EHandle(pPlayer), 6);
+					}
+					if (soundArg == 'kiss2') {
+						kiss_effect(EHandle(pPlayer), 1);
+					}
+					if (soundArg == 'bonk' and pitchArg.Length() > 0) {
+						string targetid = pitchArg;
+						targetid = targetid.ToLowercase();
+						CBasePlayer@ target = getBonkTarget(pPlayer, targetid);
+						
+						if (target !is null and target.IsConnected()) {
+							PlayerState@ tstate = getPlayerState(target);
+							g_PlayerFuncs.ClientPrintAll(HUD_PRINTNOTIFY, "[ChatSounds] " + pPlayer.pev.netname + " bonked " + target.pev.netname + ".\n");
+							stop_mic_sound(target);
+							g_SoundSystem.StopSound(target.edict(), tstate.lastSoundChan, tstate.lastSound);
+						}
+					}
                 }
 				
 				if (soundArg == 'toot' || soundArg == 'tooot' || soundArg == 'brap' || soundArg == 'tootrape' || soundArg == 'braprape' || soundArg == "bloodbrap" || soundArg == "bloodbraprape") {
@@ -1115,6 +1166,44 @@ void setpitch(const string steamId, const string val, CBasePlayer@ pPlayer) {
 	PlayerState@ state = getPlayerState(pPlayer);
     state.pitch = clampPitch(atoi(val));
     g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Pitch set to: " + state.pitch + ".\n");
+}
+
+CBasePlayer@ getBonkTarget(CBasePlayer@ caller, string name)
+{
+	name = name.ToLowercase();
+	int partialMatches = 0;
+	CBasePlayer@ partialMatch;
+	
+	for (int i = 1; i <= g_Engine.maxClients; i++) {
+		CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
+		
+		if (plr is null or !plr.IsConnected()) {
+			continue;
+		}
+		
+		const string steamId = g_EngineFuncs.GetPlayerAuthId(plr.edict()).ToLowercase();
+		
+		string plrName = string(plr.pev.netname).ToLowercase();
+		if (plrName == name || steamId == name)
+			return plr;
+		else if (plrName.Find(name) != uint(-1))
+		{
+			@partialMatch = plr;
+			partialMatches++;
+		}
+
+		g_last_map_players.insertLast(steamId);
+	}
+	
+	if (partialMatches == 1) {
+		return partialMatch;
+	} else if (partialMatches > 1) {
+		g_PlayerFuncs.ClientPrint(caller, HUD_PRINTNOTIFY, '[ChatSounds] Bonk failed. There are ' + partialMatches + ' players that have "' + name + '" in their name. Be more specific.\n');
+	} else {
+		g_PlayerFuncs.ClientPrint(caller, HUD_PRINTNOTIFY, '[ChatSounds] Bonk failed. There is no player named "' + name + '".\n');
+	}
+	
+	return null;
 }
 
 // find a player by name or partial name

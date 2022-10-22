@@ -201,6 +201,21 @@ void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ s
 	wait_mic_sound(h_speaker, h_listeners, spk_file, g_Engine.time, g_micsound_id++);
 }
 
+void stop_mic_sound(EHandle h_speaker) {
+	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
+	int eidx = speaker.entindex();
+	string spk_file = g_spk_folder + "/" + eidx + ".spk";
+	
+	File@ file = @g_FileSystem.OpenFile(spk_file, OpenFile::WRITE);
+	
+	// delete the file so it stops streaming
+	if (file !is null and file.IsOpen()) {
+		file.Remove();
+	} else {
+		println("BONK FAILED!");
+	}
+}
+
 void wait_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, string spkPath, float waitTimeStart, uint playId) {
 	CBaseEntity@ speaker = h_speaker;
 	
