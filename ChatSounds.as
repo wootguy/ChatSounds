@@ -1245,6 +1245,33 @@ void setmute(const string steamId, const string val, CBasePlayer@ pPlayer) {
 	string nicename = "???";
 	PlayerState@ state = getPlayerState(steamId);
 	
+	if (val == "\\all") {
+		int numMutes = 0;
+		
+		for (int i = 1; i <= g_Engine.maxClients; i++) {
+			CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
+			
+			if (plr is null or !plr.IsConnected() or plr.entindex() == pPlayer.entindex()) {
+				continue;
+			}
+
+			string id = g_EngineFuncs.GetPlayerAuthId(plr.edict()).ToLowercase();
+			
+			if (state.muteList.find(id) == -1) {
+				state.muteList.insertLast(id);
+				numMutes ++;
+			}
+		}
+		
+		if (numMutes > 0) {
+			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Added " + numMutes + " player(s) to mute list.\n");
+		} else {
+			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] You've already muted everyone here.\n");
+		}
+		
+		return;
+	}
+	
 	if (val.Length() == 0) {
 		if (state.muteList.size() > 0) {
 			state.muteList.resize(0);
