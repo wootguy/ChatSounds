@@ -176,6 +176,7 @@ VoicePacket parse_mic_packet(string line) {
 void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ sound, int pitch) {	
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
 	int eidx = speaker.entindex();
+	string steamId = g_EngineFuncs.GetPlayerAuthId( speaker.edict() );
 	
 	if (g_pause_mic_audio) {
 		g_PlayerFuncs.ClientPrint(speaker, HUD_PRINTNOTIFY, "[ChatSounds] Mic audio is currently paused.");
@@ -197,7 +198,7 @@ void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ s
 		file.Remove();
 	}
 	
-	send_steam_voice_message(sound.trigger + " " + pitch + " " + CSMIC_VOLUME + " " + eidx);
+	send_steam_voice_message(sound.trigger + " " + pitch + " " + CSMIC_VOLUME + " " + eidx + " " + steamId);
 	wait_mic_sound(h_speaker, h_listeners, spk_file, g_Engine.time, g_micsound_id++);
 }
 
