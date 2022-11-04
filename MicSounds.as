@@ -23,6 +23,31 @@ void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ s
 	g_EngineFuncs.ServerExecute();
 }
 
+void update_mic_sounds_config() {
+	uint32 reliableBits = 0;
+	
+	for (int i = 1; i <= g_Engine.maxClients; i++) {
+		CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
+		uint32 plrBit = 1 << (i & 31);
+		
+		if (plr is null or !plr.IsConnected()) {
+			continue;
+		}
+		
+		PlayerState@ state = getPlayerState(plr);
+		if (g_EngineFuncs.Time() - state.joinTime < CSRELIABLE_DELAY-1) {
+			continue; // don't enable yet. A separate config is coming later
+		}
+		
+		if (state.reliablePackets) {
+			reliableBits |= plrBit;
+		}
+	}
+
+	g_EngineFuncs.ServerCommand("config_mic_sound " + reliableBits + "\n");
+	g_EngineFuncs.ServerExecute();
+}
+
 void stop_mic_sound(EHandle h_speaker) {
 	CBasePlayer@ speaker = cast<CBasePlayer@>(h_speaker.GetEntity());
 	int eidx = speaker.entindex();

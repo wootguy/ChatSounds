@@ -14,6 +14,7 @@ const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
 const float CSMIC_SOUND_TIMEOUT = 1.0f; // wait this many seconds before giving up on waiting for a sound to convert
 const float CSMIC_VOLUME = 22; // global volume setting for sounds played over mic, 15 = 100% volume of normal sounds
+const float CSRELIABLE_DELAY = 10.0f; // seconds to wait after player join to enable reliable packets (fixes overflows/desyncs)
 /////////
 
 // For .csmic to work, run the steam_voice program with the following arguments:
@@ -50,6 +51,7 @@ class PlayerState {
 	Vector brapColor = Vector(200, 255, 200);
 	bool reliablePackets = false; // helps with lossy connections
 	float lastLaggyCmd = 0; // for cooldowns on commands that could lag the serber to death if spammed
+	float joinTime; // for delaying reliable packets
 	
 	string lastSound;
 	SOUND_CHANNEL lastSoundChan;
@@ -576,6 +578,7 @@ void csreliable(const CCommand@ pArgs) {
 		state.reliablePackets = atoi(pArgs[1]) != 0;
 	}
 	
+	update_mic_sounds_config();
 	g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
 }
 
@@ -834,6 +837,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 			if (pArguments.ArgC() > 1) {
 				state.reliablePackets = atoi(pArguments[1]) != 0;
 			}
+			update_mic_sounds_config();
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
             pParams.ShouldHide = true;
         }
@@ -880,8 +884,17 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
     return HOOK_CONTINUE;
 }
 
+
+
 HookReturnCode ClientPutInServer(CBasePlayer@ pPlayer) {
     g_Delay = g_Delay + 333;
+	
+	PlayerState@ state = getPlayerState(pPlayer);
+	state.joinTime = g_EngineFuncs.Time();
+	
+	// set reliable flag after player fully loads (TODO: this isn't good enough)
+	g_Scheduler.SetTimeout("update_mic_sounds_config", CSRELIABLE_DELAY);
+	
     return HOOK_CONTINUE;
 }
 
