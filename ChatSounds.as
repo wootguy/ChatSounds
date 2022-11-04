@@ -27,7 +27,6 @@ class ChatSound {
 	// for sounds that players need to select
 	bool isPrecached = false;
 	bool isStreaming = false; // prevent parallel loading
-	array<VoicePacket> previewData; // voice data for previewing the chatsound before it's loaded
 	
 	ChatSound() {}
 	
@@ -51,7 +50,6 @@ class PlayerState {
 	Vector brapColor = Vector(200, 255, 200);
 	bool reliablePackets = false; // helps with lossy connections
 	float lastLaggyCmd = 0; // for cooldowns on commands that could lag the serber to death if spammed
-	uint lastStopsound = 0; // stop mic sounds with ids less than this
 	
 	string lastSound;
 	SOUND_CHANNEL lastSoundChan;
@@ -91,7 +89,6 @@ CClientCommand g_CSStats("csstats", "Sound usage stats", @cs_stats);
 CClientCommand g_CSMute("csmute", "Mute sounds from player", @csmute);
 CClientCommand g_CSVol("csvol", "Change sound volume for all players", @csvol);
 CClientCommand g_writecsstats("writecsstats", "Write sound usage stats", @writecsstats_cmd, ConCommandFlag::AdminOnly);
-CClientCommand g_csupdate("csupdate", "Force reload of sounds in steam_voice program", @csupdate, ConCommandFlag::AdminOnly);
 CClientCommand g_cspause("cspause", "Pause chatsound mic audio to fix lag", @cspause, ConCommandFlag::AdminOnly);
 CClientCommand g_csreliable("csreliable", "Reliable packets for unloaded sounds", @csreliable);
 CClientCommand g_cstop("cstop", "Stop playing mic sounds", @cstop);
@@ -341,8 +338,6 @@ void ReadSounds() {
         g_normalSoundKeys.sortAsc();
         g_extraSoundKeys.sortAsc();
     }
-	
-	send_steam_voice_message("!RELOAD_SOUNDS");
 }
 
 const bool SoundsChanged() {
@@ -560,12 +555,6 @@ void csvol(const CCommand@ pArgs) {
     setvol(steamId, pArgs[1], pPlayer);
 }
 
-void csupdate(const CCommand@ pArgs) {
-    CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
-    g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "Sounds reloading.");
-	send_steam_voice_message("!RELOAD_SOUNDS");
-}
-
 void cspause(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
    
@@ -592,11 +581,8 @@ void csreliable(const CCommand@ pArgs) {
 
 void cstop(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
-   
-	PlayerState@ state = getPlayerState(pPlayer);
-	state.lastStopsound = g_micsound_id;
-	
-	g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTCONSOLE, "[ChatSounds] Stopping mic sounds\n");
+	g_EngineFuncs.ServerCommand("stop_mic_sound " + pPlayer.entindex() + " 0\n");
+	g_EngineFuncs.ServerExecute();
 }
 
 void csmiccmd(const CCommand@ pArgs) {
@@ -853,9 +839,8 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cstop') {
             CBasePlayer@ pPlayer = pParams.GetPlayer();
-			PlayerState@ state = getPlayerState(pPlayer);
-			state.lastStopsound = g_micsound_id;
-			g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTCONSOLE, "[ChatSounds] Stopping mic sounds\n");
+			g_EngineFuncs.ServerCommand("stop_mic_sound " + pPlayer.entindex() + " 0\n");
+			g_EngineFuncs.ServerExecute();
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cs') {
@@ -1017,6 +1002,8 @@ void csmic(CBasePlayer@ plr, const CCommand@ args) {
 	if (newMode) {
 		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode enabled. Unloaded sounds will be streamed to you via microphone.\n");
 	} else {
+		g_EngineFuncs.ServerCommand("stop_mic_sound " + plr.entindex() + " 0\n");
+		g_EngineFuncs.ServerExecute();
 		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode disabled. Unloaded sounds must now be loaded for you to hear them.\n");
 	}
 }
@@ -1264,6 +1251,8 @@ void setmute(const string steamId, const string val, CBasePlayer@ pPlayer) {
 		}
 		
 		if (numMutes > 0) {
+			g_EngineFuncs.ServerCommand("stop_mic_sound " + pPlayer.entindex() + " 0\n");
+			g_EngineFuncs.ServerExecute();
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Added " + numMutes + " player(s) to mute list.\n");
 		} else {
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] You've already muted everyone here.\n");
@@ -1306,6 +1295,9 @@ void setmute(const string steamId, const string val, CBasePlayer@ pPlayer) {
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Can't mute more than 50 players!\n");
 			return;
 		}
+		
+		g_EngineFuncs.ServerCommand("stop_mic_sound " + pPlayer.entindex() + " 0\n");
+		g_EngineFuncs.ServerExecute();
 		
 		g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Muted player: " + nicename + "\n");
 		state.muteList.insertLast(targetid);
