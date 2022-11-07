@@ -95,6 +95,8 @@ CClientCommand g_cspause("cspause", "Pause chatsound mic audio to fix lag", @csp
 CClientCommand g_csreliable("csreliable", "Reliable packets for unloaded sounds", @csreliable);
 CClientCommand g_cstop("cstop", "Stop playing mic sounds", @cstop);
 
+CConCommand _extMute( "csmute_ext", "Mute from other plugin", @extMute ); // for muting from another plugin
+
 void PluginInit() {
     g_Module.ScriptInfo.SetAuthor("incognico + w00tguy");
     g_Module.ScriptInfo.SetContactInfo("https://discord.gg/qfZxWAd");
@@ -543,6 +545,28 @@ void cspitch(const CCommand@ pArgs) {
     setpitch(steamId, pArgs[1], pPlayer);
 }
 
+void extMute(const CCommand@ args) {
+	println("[ChatSounds] extmute " + args[1] + " " + args[2] + " " + args[3]);
+	CBasePlayer@ muter = g_PlayerFuncs.FindPlayerByIndex(atoi(args[1]));
+	string targetid = args[2].ToLowercase();
+	bool shouldMute = atoi(args[3]) != 0;
+	
+	PlayerState@ state = getPlayerState(muter);	
+	
+	if (shouldMute) {
+		if (state.muteList.find(targetid) == -1) {
+			state.muteList.insertLast(targetid);
+			
+			g_EngineFuncs.ServerCommand("stop_mic_sound " + muter.entindex() + " 0\n");
+			g_EngineFuncs.ServerExecute();
+		}
+	} else {
+		if (state.muteList.find(targetid) != -1) {
+			state.muteList.removeAt(state.muteList.find(targetid));
+		}
+	}
+}
+
 void csmute(const CCommand@ pArgs) {
     CBasePlayer@ pPlayer = g_ConCommandSystem.GetCurrentPlayer();
     const string steamId = g_EngineFuncs.GetPlayerAuthId(pPlayer.edict());
@@ -563,9 +587,9 @@ void cspause(const CCommand@ pArgs) {
 	g_pause_mic_audio = !g_pause_mic_audio;
 	
 	if (g_pause_mic_audio) {
-		g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "[ChatSounds] Mic audio paused.");
+		g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "[ChatSounds] Mic audio paused.\n");
 	} else {
-		g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "[ChatSounds] Mic audio resumed.");
+		g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "[ChatSounds] Mic audio resumed.\n");
 	}
 }
 
@@ -1191,8 +1215,6 @@ CBasePlayer@ getBonkTarget(CBasePlayer@ caller, string name)
 			@partialMatch = plr;
 			partialMatches++;
 		}
-
-		g_last_map_players.insertLast(steamId);
 	}
 	
 	if (partialMatches == 1) {
