@@ -2,6 +2,8 @@
 #include "MicSounds"
 #include "brap"
 
+// . doesnt work in spectator for loaded sounds
+
 // config
 const string g_SoundFile      = "scripts/plugins/cfg/ChatSounds.txt"; // permanently precached sounds
 const string g_extraSoundFile = "scripts/plugins/cfg/ChatSounds_extra.txt"; // sounds that players can choose to precache
@@ -709,16 +711,25 @@ void te_playersprites(CBasePlayer@ target,
 
 HookReturnCode ClientSay(SayParameters@ pParams) {
     const CCommand@ pArguments = pParams.GetArguments();
-
+	CBasePlayer@ pPlayer = pParams.GetPlayer();
+	PlayerState@ state = getPlayerState(pPlayer);
+	
     if (pArguments.ArgC() > 0) {
         const string soundArgUpper = pArguments.Arg(0);
         const string soundArg = pArguments.Arg(0).ToLowercase();
         const string pitchArg = pArguments.ArgC() > 1 ? pArguments.Arg(1) : "";
 
+		if (soundArg == ".") {
+			player_say(pPlayer, pParams.GetCommand());
+			pParams.ShouldHide = true;
+			stop_mic_sound(pPlayer);
+			g_SoundSystem.StopSound(pPlayer.edict(), state.lastSoundChan, state.lastSound);
+			return HOOK_CONTINUE;
+		}
+
         if (g_SoundList.exists(soundArg)) {
 			ChatSound@ chatsound = cast<ChatSound@>(g_SoundList[soundArg]);
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
-			PlayerState@ state = getPlayerState(pPlayer);
+			
             const string steamId = g_EngineFuncs.GetPlayerAuthId(pPlayer.edict());
             const int idx = pPlayer.entindex();
 
@@ -821,42 +832,34 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
             }
         }
         else if (pArguments.ArgC() > 1 && soundArg == '.cspitch') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
             const string steamId = g_EngineFuncs.GetPlayerAuthId(pPlayer.edict());
             pParams.ShouldHide = true;
             setpitch(steamId, pArguments[1], pPlayer);
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csmute') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
             const string steamId = g_EngineFuncs.GetPlayerAuthId(pPlayer.edict());
             pParams.ShouldHide = true;
             setmute(steamId, pArguments[1], pPlayer);
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csvol') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
             const string steamId = g_EngineFuncs.GetPlayerAuthId(pPlayer.edict());
             pParams.ShouldHide = true;
             setvol(steamId, pArguments[1], pPlayer);
         }
         else if (pArguments.ArgC() > 0 && soundArg == '.csstats') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
             g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Usage stats sent to your console.\n");
             pParams.ShouldHide = true;
             showSoundStats(pPlayer, pArguments.Arg(1));
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csload') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			csload(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csunload') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			csunload(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csreliable') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
-			PlayerState@ state = getPlayerState(pPlayer);
 			state.reliablePackets = !state.reliablePackets;
 			if (pArguments.ArgC() > 1) {
 				state.reliablePackets = atoi(pArguments[1]) != 0;
@@ -866,40 +869,33 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cstop') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			g_EngineFuncs.ServerCommand("stop_mic_sound " + pPlayer.entindex() + " 0\n");
 			g_EngineFuncs.ServerExecute();
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cs') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			cspreview(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.listsounds') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Sound list sent to your console.\n");
 			listsounds(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.listsounds2') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Sound list sent to your console.\n");
 			listsounds2(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csmic') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			csmic(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.cslist') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			listpersonal(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.brapcolor') {
-            CBasePlayer@ pPlayer = pParams.GetPlayer();
 			brapcolor(pPlayer, pArguments);
             pParams.ShouldHide = true;
         }
