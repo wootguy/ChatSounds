@@ -23,12 +23,22 @@ void play_mic_sound(EHandle h_speaker, array<EHandle>@ h_listeners, ChatSound@ s
 	g_EngineFuncs.ServerExecute();
 }
 
-void update_mic_sounds_config() {
-	uint32 reliableBits = 0;
+void update_mic_sounds_config(CBasePlayer@ plr) {	
+	if (plr is null or !plr.IsConnected()) {
+		return;
+	}
 	
+	PlayerState@ state = getPlayerState(plr);
+		
+	bool isGlobal = state.micMode == MICMODE_GLOBAL || state.micMode == MICMODE_SUPER_GLOBAL;
+	g_EngineFuncs.ServerCommand("config_mic_sound " + plr.entindex() + " " + state.reliablePackets + " " + isGlobal + " " + state.volume + "\n");
+
+	g_EngineFuncs.ServerExecute();
+}
+
+void update_mic_sounds_config_all() {	
 	for (int i = 1; i <= g_Engine.maxClients; i++) {
 		CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
-		uint32 plrBit = 1 << (i & 31);
 		
 		if (plr is null or !plr.IsConnected()) {
 			continue;
@@ -39,12 +49,10 @@ void update_mic_sounds_config() {
 			continue; // don't enable yet. A separate config is coming later
 		}
 		
-		if (state.reliablePackets) {
-			reliableBits |= plrBit;
-		}
+		bool isGlobal = state.micMode == MICMODE_GLOBAL || state.micMode == MICMODE_SUPER_GLOBAL;
+		g_EngineFuncs.ServerCommand("config_mic_sound " + i + " " + state.reliablePackets + " " + isGlobal + " " + state.volume + "\n");
 	}
 
-	g_EngineFuncs.ServerCommand("config_mic_sound " + reliableBits + "\n");
 	g_EngineFuncs.ServerExecute();
 }
 

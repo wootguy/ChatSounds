@@ -44,10 +44,17 @@ class ChatSound {
 	}
 }
 
+enum MicModes {
+	MICMODE_OFF, 	// don't ever use mic audio to play chatsounds
+	MICMODE_LOCAL,	// use mic audio to play unloaded sounds + attenuate volume
+	MICMODE_GLOBAL,	// use mic audio to play unloaded sounds + max volume everywhere in the map
+	MICMODE_SUPER_GLOBAL	// play all sounds at max volume everywhere in the map
+}
+
 class PlayerState {
 	array<string> soundList;
 	array<string> muteList;
-	bool micMode = true;
+	int micMode = MICMODE_LOCAL;
 	int volume = 100;
 	int pitch = 100;
 	Vector brapColor = Vector(200, 255, 200);
@@ -58,14 +65,6 @@ class PlayerState {
 	string lastSound;
 	SOUND_CHANNEL lastSoundChan;
 }
-
-/*
-enum MicModes {
-	MICMODE_OFF, 			// don't ever use mic audio to play chatsounds
-	MICMODE_UNLOADED_ONLY,	// only use mic audio to play unloaded sounds
-	MICMODE_ALWAYS			// play all sounds on mic, even if loaded
-}
-*/
 
 uint g_Delay = g_BaseDelay;
 bool precached = false;
@@ -111,6 +110,7 @@ void PluginInit() {
     ReadSounds();
     loadUsageStats();
 	loadPersonalSoundLists();
+	update_mic_sounds_config_all();
 	
 	g_Scheduler.SetInterval("brap_think", 0.05f, -1);
 }
@@ -225,7 +225,10 @@ void loadPersonalSoundLists() {
                 continue;
             
             array<string> parts = line.Split("\\");
-			bool micMode = atoi(parts[1]) != 0;
+			int micMode = atoi(parts[1]);
+			if (micMode < 0) micMode = 0;
+			if (micMode > 3) micMode = 3;
+			
 			array<string> sounds = (parts[2].Length() > 0) ? parts[2].Split(" ") : array<string>();
 			string steamid = "STEAM_0:" + parts[0];
 			
@@ -259,11 +262,11 @@ void writePersonalSoundLists() {
 			fileSteamId = fileSteamId.SubString(8); // strip STEAM_0:
 			PlayerState@ state = cast<PlayerState@>(g_playerStates[steamId]);
 			
-			if (state.soundList.size() == 0 and !state.micMode) {
+			if (state.soundList.size() == 0 and state.micMode == MICMODE_LOCAL) {
 				continue;
 			}
 			
-			string line = fileSteamId + "\\" + (state.micMode ? "1" : "0") + "\\";
+			string line = fileSteamId + "\\" + state.micMode + "\\";
 			for (uint k = 0; k < state.soundList.size(); k++) {
 				line += (k > 0 ? " " : "") + state.soundList[k];
 			}
@@ -604,7 +607,7 @@ void csreliable(const CCommand@ pArgs) {
 		state.reliablePackets = atoi(pArgs[1]) != 0;
 	}
 	
-	update_mic_sounds_config();
+	update_mic_sounds_config(pPlayer);
 	g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
 }
 
@@ -681,11 +684,11 @@ void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd
 		float localVol = float(vol / 100.0f)*volume;
 		
 		if (localVol > 0) {
-			if (snd.isPrecached) {
+			if (snd.isPrecached && state.micMode != MICMODE_SUPER_GLOBAL) {
 				g_SoundSystem.PlaySound(speaker.edict(), channel, snd.fpath, localVol, attenuation, 0, pitch, plr.entindex());
 				state.lastSound = snd.fpath;
 				state.lastSoundChan = channel;
-			} else if (state.micMode) {
+			} else if (state.micMode > 0) {
 				micListeners.insertLast(EHandle(plr));
 			}
 		}
@@ -741,7 +744,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
                 pitch = clampPitch(atoi(pitchArg));
             }
 			
-			if (!chatsound.isPrecached and !state.micMode) {
+			if (!chatsound.isPrecached and state.micMode == MICMODE_OFF) {
 				string msg = "[ChatSounds] '" + soundArg + "' is unloaded. ";
 				
 				array<string>@ personalSoundList = getPersonalSoundList(pPlayer);
@@ -779,7 +782,8 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
             }
             else {
                 logSoundStat(pPlayer, soundArg);
-
+				g_ChatTimes[idx] = t;
+				
                 if (soundArg == 'medic' || soundArg == 'meedic') {
                     pPlayer.ShowOverheadSprite('sprites/saveme.spr', 51.0f, 3.5f);
 					play_chat_sound(pPlayer, CHAN_STATIC, chatsound, 1.0f, 0.2f, Math.RandomLong(35, 220));
@@ -819,7 +823,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 					do_sniff(pPlayer, soundArg, pitch);
 				}
 
-                g_ChatTimes[idx] = t;
+                
 
                 if (allowrelay)
                     return HOOK_CONTINUE;
@@ -864,7 +868,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 			if (pArguments.ArgC() > 1) {
 				state.reliablePackets = atoi(pArguments[1]) != 0;
 			}
-			update_mic_sounds_config();
+			update_mic_sounds_config(pPlayer);
 			g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Reliable packets " + (state.reliablePackets ? "enabled" : "disabled") + ".\n");
             pParams.ShouldHide = true;
         }
@@ -904,7 +908,16 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
     return HOOK_CONTINUE;
 }
 
-
+void delay_reliable_enable(EHandle h_plr, string steamId) {
+	CBasePlayer@ plr = cast<CBasePlayer@>(h_plr.GetEntity());
+	PlayerState@ state = cast<PlayerState@>( g_playerStates[steamId] );
+	state.reliablePackets = true;
+	
+	if (plr !is null) {
+		update_mic_sounds_config(plr);
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTNOTIFY, "[ChatSounds] Reliable packets enabled.\n");
+	}
+}
 
 HookReturnCode ClientPutInServer(CBasePlayer@ pPlayer) {
     g_Delay = g_Delay + 333;
@@ -912,8 +925,14 @@ HookReturnCode ClientPutInServer(CBasePlayer@ pPlayer) {
 	PlayerState@ state = getPlayerState(pPlayer);
 	state.joinTime = g_EngineFuncs.Time();
 	
-	// set reliable flag after player fully loads (TODO: this isn't good enough)
-	g_Scheduler.SetTimeout("update_mic_sounds_config", CSRELIABLE_DELAY);
+	// don't set reliable flag until player fully loads to prevent desyncs/overflows
+	if (state.reliablePackets) {
+		state.reliablePackets = false;
+		string steamId = g_EngineFuncs.GetPlayerAuthId( pPlayer.edict() );
+		g_Scheduler.SetTimeout("delay_reliable_enable", CSRELIABLE_DELAY, EHandle(pPlayer), steamId);
+	}
+	
+	update_mic_sounds_config(pPlayer);
 	
     return HOOK_CONTINUE;
 }
@@ -1024,21 +1043,38 @@ void showPersonalSounds(CBasePlayer@ plr) {
 void csmic(CBasePlayer@ plr, const CCommand@ args) {
 	PlayerState@ state = getPlayerState(plr);
 	
-	bool newMode = !state.micMode;
+	int newMode = 0;
 	
 	if (args.ArgC() > 1) {
-		newMode = args[1] != '0';
+		newMode = atoi(args[1]);
+		if (newMode > 3) newMode = 3;
+		if (newMode < 0) newMode = 0;
+	} else {
+		g_PlayerFuncs.SayText(plr, "Usage: .csmic [0-3]\n");
+		g_PlayerFuncs.SayText(plr, "  0 (DISABLED) = Unloaded sounds must be loaded to be heard.\n");
+		g_PlayerFuncs.SayText(plr, "  1 (LOCAL) = Unloaded sounds played on mic. Volume fades with distance.\n");
+		g_PlayerFuncs.SayText(plr, "  2 (GLOBAL) = Unloaded sounds played on mic. No volume fade.\n");
+		g_PlayerFuncs.SayText(plr, "  3 (SUPER GLOBAL) = ALL sounds played on mic. No volume fade.\n");
+		g_PlayerFuncs.SayText(plr, "Your mode is currently: " + state.micMode + "\n");
+		return;
 	}
 	
-	state.micMode = newMode;	
+	state.micMode = newMode;
 	
-	if (newMode) {
-		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode enabled. Unloaded sounds will be streamed to you via microphone.\n");
+	if (newMode == MICMODE_SUPER_GLOBAL) {
+		g_PlayerFuncs.SayText(plr, "[ChatSounds] Super global mode enabled. ALL sounds will be played on mic at max volume everywhere in the map.\n");
+	}
+	else if (newMode == MICMODE_GLOBAL) {
+		g_PlayerFuncs.SayText(plr, "[ChatSounds] Global mic mode enabled. Unloaded sounds will be played on mic at max volume everywhere in the map.\n");
+	} else if (newMode == MICMODE_LOCAL) {
+		g_PlayerFuncs.SayText(plr, "[ChatSounds] Local mic mode enabled. Unloaded sounds will be played on mic at a volume determined by distance.\n");
 	} else {
 		g_EngineFuncs.ServerCommand("stop_mic_sound " + plr.entindex() + " 0\n");
 		g_EngineFuncs.ServerExecute();
 		g_PlayerFuncs.SayText(plr, "[ChatSounds] Mic mode disabled. Unloaded sounds must now be loaded for you to hear them.\n");
 	}
+	
+	update_mic_sounds_config(plr);
 }
 
 void cspreview(CBasePlayer@ plr, const CCommand@ args) {
@@ -1049,8 +1085,8 @@ void cspreview(CBasePlayer@ plr, const CCommand@ args) {
 	
 	PlayerState@ state = getPlayerState(plr);
 	float delta = g_Engine.time - state.lastLaggyCmd;
-	if (delta < 3 and delta >= 0) {
-		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Wait a few seconds before using that command.\n");
+	if (delta < 1 and delta >= 0) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Wait a second before using that command.\n");
 		return;
 	}
 	state.lastLaggyCmd = g_Engine.time;
@@ -1346,11 +1382,15 @@ void setvol(const string steamId, const string val, CBasePlayer@ pPlayer) {
 	
 	int newvol = atoi(val);
 	if (newvol < 0) newvol = 0;
-	if (newvol > 100) newvol = 100;
+	if (newvol > 500) newvol = 500;
 	
 	state.volume = newvol;
 	
-	g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Volume set to " + newvol + "%\n");
+	if (state.volume <= 100)
+		g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Volume set to " + newvol + "%\n");
+	else
+		g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Volume set to " + newvol + "% (only microphone sounds can play above 100% volume)\n");
+	update_mic_sounds_config(pPlayer);
 }
 
 const int clampPitch(const int val) {
