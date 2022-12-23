@@ -719,9 +719,13 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 	PlayerState@ state = getPlayerState(pPlayer);
 	
     if (pArguments.ArgC() > 0) {
-        const string soundArgUpper = pArguments.Arg(0);
-        const string soundArg = pArguments.Arg(0).ToLowercase();
-        const string pitchArg = pArguments.ArgC() > 1 ? pArguments.Arg(1).Replace("%", "%%") : "";
+        string soundArgUpper = pArguments.Arg(0);
+        string soundArg = pArguments.Arg(0).ToLowercase();
+        string pitchArg = pArguments.ArgC() > 1 ? pArguments.Arg(1) : "";
+		
+		if (int(pitchArg.Find("%")) != -1) {
+			pitchArg = pitchArg.Replace("%", "%%");
+		}
 
 		if (soundArg == ".") {
 			player_say(pPlayer, pParams.GetCommand());
