@@ -79,6 +79,7 @@ string g_last_precache_map; // avoid precaching new sounds on restarted maps, or
 array<string> g_last_map_players; // players that were present during the previous level change
 bool g_pause_mic_audio = false;
 uint g_micsound_id = 0; // used with .cstop.
+string g_previous_map = "";
 
 CClientCommand g_ListSounds("listsounds", "List all chat sounds", @listsoundscmd);
 CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsounds2cmd);
@@ -135,14 +136,14 @@ void kiss_effect(EHandle h_plr, int kissLeft) {
 }
 
 void MapInit() {
-    if (SoundsChanged())
-        ReadSounds();
-
     g_ChatTimes.resize(33);
     g_any_stats_changed = false;
     g_Delay = g_BaseDelay;
 	
 	if (g_Engine.mapname != g_last_precache_map) {
+		if (SoundsChanged())
+			ReadSounds();
+		
 		updatePrecachedSounds();
 		g_last_precache_map = g_Engine.mapname;
 	}
@@ -720,7 +721,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
     if (pArguments.ArgC() > 0) {
         const string soundArgUpper = pArguments.Arg(0);
         const string soundArg = pArguments.Arg(0).ToLowercase();
-        const string pitchArg = pArguments.ArgC() > 1 ? pArguments.Arg(1) : "";
+        const string pitchArg = pArguments.ArgC() > 1 ? pArguments.Arg(1).Replace("%", "%%") : "";
 
 		if (soundArg == ".") {
 			player_say(pPlayer, pParams.GetCommand());
@@ -915,7 +916,7 @@ void delay_reliable_enable(EHandle h_plr, string steamId) {
 	
 	if (plr !is null) {
 		update_mic_sounds_config(plr);
-		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTNOTIFY, "[ChatSounds] Reliable packets enabled.\n");
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTNOTIFY, "[ChatSounds] Reliable packets started.\n");
 	}
 }
 
