@@ -37,22 +37,7 @@ amogugus twlz/stolen/amogugus.wav
 
 ### Sound streaming
 
-For sound streaming to work (`.cs` and `.csmic`) you need to build the steam_voice program from the [Radio plugin](https://github.com/wootguy/Radio) and run it using these arguments:  
-`steam_voice.exe "chatsounds" <path_to_micsound_file> <path_to_chatsound_txt> <path_to_Sven_Coop_folder>`
-
-Example Linux script to start the program:  
-```
-steam_voice \
-	chatsounds \
-	my_sven_install/svencoop/scripts/plugins/store/_tocs.txt \
-	my_sven_install/svencoop_addon/scripts/plugins/cfg/ChatSounds.txt \
-	my_sven_install
-```
-
-The program must be running at all times. It will auto-reload sounds as you update the ChatSounds.txt, on map change. All sound files must be .wav format.
-
-The micsound file (_tocs.txt) is written to by the angelscript plugin. It sends commands which steam_voice reads, then steam_voice converts the .wav files into .spk files which the plugin can use to send audio packets to players.
-
+For sound streaming to work (`.cs` and `.csmic`) you need to install the [MicSounds plugin](https://github.com/wootguy/MicSounds)
 
 ### Speeding up load times for players
 Ever join a server, load into the map, and then the game freezes for a while? That happens because sounds are being decompressed and loaded into memory. That will happen on every map load if you use a plugin like this. Servers often use .ogg files for chat sounds which is the slowest format to decode.
