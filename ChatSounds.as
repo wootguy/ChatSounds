@@ -34,6 +34,44 @@ class ChatSound {
 	ChatSound() {}
 	
 	ChatSound(string trigger, string fpath, bool alwaysPrecache) {
+		const uint triggerLen = trigger.Length();
+	
+		for (uint i = 0; i < triggerLen; i++)
+		{
+			string triggerSequence = trigger.SubString(0, i+1);
+			
+			array<string>@ wordList;
+			if( !g_SoundBeginTrie.exists(triggerSequence) )
+			{
+				@wordList = array<string>();
+				g_SoundBeginTrie[triggerSequence] = @wordList;
+			}
+			else
+			{
+				@wordList = cast<array<string>>( g_SoundBeginTrie[triggerSequence] );
+			}
+			wordList.insertLast(trigger);
+			
+			for (uint j = i; j < triggerLen; j++)
+			{
+				string containSequence = trigger.SubString(i, j);
+				// if (containSequence == "mot")
+					// g_PlayerFuncs.SayTextAll(null, "Found mot! for word "+trigger);
+				
+				if( !g_SoundContainTrie.exists(containSequence) )
+				{
+					@wordList = array<string>();
+					g_SoundContainTrie[containSequence] = @wordList;
+				}
+				else
+				{
+					@wordList = cast<array<string>>( g_SoundContainTrie[containSequence] );
+				}
+				
+				wordList.insertLast(trigger);
+			}
+		}
+		
 		this.trigger = trigger;
 		this.fpath = fpath;
 		this.alwaysPrecache = alwaysPrecache;
@@ -69,6 +107,8 @@ class PlayerState {
 uint g_Delay = g_BaseDelay;
 bool precached = false;
 dictionary g_SoundList;
+dictionary g_SoundBeginTrie;
+dictionary g_SoundContainTrie;
 dictionary g_playerStates;
 array<uint> g_ChatTimes(33);
 array<string> @g_SoundListKeys;
@@ -405,11 +445,74 @@ void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
 		return;
 	}
 	state.lastLaggyCmd = g_Engine.time;
-	
-    lines.insertLast("\nEXTRA SOUND TRIGGERS\n");
-    lines.insertLast("------------------------\n");
 
     string sMessage = "";
+	
+	if (args.ArgC() > 1)
+	{
+		const string trigger = args.Arg(1);
+
+		if (g_SoundBeginTrie.exists(trigger))
+		{
+			lines.insertLast("\nSOUND TRIGGERS STARTING WITH '"+trigger+"'\n");
+			lines.insertLast("------------------------\n");
+			array<string>@ triggers = cast<array<string>>( g_SoundBeginTrie[trigger] );
+
+			for (uint i = 0; i < triggers.length(); i++)
+			{
+				sMessage += triggers[i] + " | ";
+				
+				if (i % 5 == 0) {
+					sMessage.Resize(sMessage.Length() -2);
+					lines.insertLast(sMessage);
+					lines.insertLast("\n");
+					sMessage = "";
+				}
+			}
+		}
+		else
+		{
+			g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "\nCouldn't find any sound that begins with that sequence.\n");
+		}
+		
+		if (g_SoundContainTrie.exists(trigger))
+		{
+			lines.insertLast("\nSOUND TRIGGERS CONTAINING '"+trigger+"'\n");
+			lines.insertLast("------------------------\n");
+			array<string>@ ctriggers = cast<array<string>>( g_SoundContainTrie[trigger] );
+
+			for (uint i = 0; i < ctriggers.length(); i++)
+			{
+				sMessage += ctriggers[i] + " | ";
+				
+				if (i % 5 == 0) {
+					sMessage.Resize(sMessage.Length() -2);
+					lines.insertLast(sMessage);
+					lines.insertLast("\n");
+					sMessage = "";
+				}
+			}
+		}
+		else
+		{
+			g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Couldn't find any sound that contains with that sequence.\n");
+		}
+		
+		if (lines.length() > 0)
+		{
+			if (sMessage.Length() > 2) {
+				sMessage.Resize(sMessage.Length() -2);
+				lines.insertLast(sMessage + "\n");
+			}
+			
+			lines.insertLast("\n\n");
+			delay_print(EHandle(plr), lines, 24);
+			return;
+		}
+	}
+	
+	lines.insertLast("\nEXTRA SOUND TRIGGERS\n");
+    lines.insertLast("------------------------\n");
 
     for (uint i = 1; i < g_extraSoundKeys.length()+1; ++i) {
         sMessage += g_extraSoundKeys[i-1] + " | ";
