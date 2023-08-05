@@ -407,11 +407,23 @@ void showSoundStats_singleSound(CBasePlayer@ plr, string chatTrigger) {
 
 void cs_stats(const CCommand@ pArgs) {
     CBasePlayer@ plr = g_ConCommandSystem.GetCurrentPlayer();
+	
+	if (!g_stats_enabled) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Chat sound stats are disabled.\n");
+		return;
+	}
+	
     showSoundStats(plr, pArgs.Arg(1));
 }
 
 void writecsstats_cmd(const CCommand@ pArgs) {
     CBasePlayer@ plr = g_ConCommandSystem.GetCurrentPlayer();
+	
+	if (!g_stats_enabled) {
+		g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Chat sound stats are disabled.\n");
+		return;
+	}
+	
     writeUsageStats();
     g_PlayerFuncs.SayText(plr, "[ChatSounds] Wrote usage stats to " + soundStatsFile + "\n");
 }

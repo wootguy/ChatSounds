@@ -12,7 +12,7 @@ const string soundListsFile   = "scripts/plugins/store/cs_lists.txt"; // persona
 const string g_spk_folder     = "scripts/plugins/temp"; // path to sound files converted to NetworkMessage format
 const string micsound_file    = "scripts/plugins/store/_tocs.txt";
 const uint g_BaseDelay        = 6666;
-const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr'};
+const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr', 'sprites/flowergag.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
 const float CSMIC_SOUND_TIMEOUT = 1.0f; // wait this many seconds before giving up on waiting for a sound to convert
 const float CSMIC_VOLUME = 22; // global volume setting for sounds played over mic, 15 = 100% volume of normal sounds
@@ -80,6 +80,7 @@ array<string> g_last_map_players; // players that were present during the previo
 bool g_pause_mic_audio = false;
 uint g_micsound_id = 0; // used with .cstop.
 string g_previous_map = "";
+bool g_stats_enabled = false;
 
 CClientCommand g_ListSounds("listsounds", "List all chat sounds", @listsoundscmd);
 CClientCommand g_ListSounds2("listsounds2", "List extra chat sounds", @listsounds2cmd);
@@ -109,7 +110,8 @@ void PluginInit() {
     g_Hooks.RegisterHook( Hooks::Game::MapChange, @MapChange );
 
     ReadSounds();
-    loadUsageStats();
+	if (g_stats_enabled)
+		loadUsageStats();
 	loadPersonalSoundLists();
 	update_mic_sounds_config_all();
 	
@@ -117,7 +119,8 @@ void PluginInit() {
 }
 
 void PluginExit() {
-    writeUsageStats();
+	if (g_stats_enabled)
+		writeUsageStats();
 	writePersonalSoundLists();
 	brap_unload();
 }
@@ -133,6 +136,13 @@ void kiss_effect(EHandle h_plr, int kissLeft) {
 	if (kissLeft > 0) {
 		g_Scheduler.SetTimeout("kiss_effect", 0.2f, h_plr, kissLeft-1);
 	}
+}
+
+void te_killplayerattachments(CBasePlayer@ plr, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {
+	NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);
+	m.WriteByte(TE_KILLPLAYERATTACHMENTS);
+	m.WriteByte(plr.entindex());
+	m.End();
 }
 
 void MapInit() {
@@ -286,7 +296,8 @@ void writePersonalSoundLists() {
 }
 
 HookReturnCode MapChange() {
-    writeUsageStats();
+	if (g_stats_enabled)
+		writeUsageStats();
 	writePersonalSoundLists();
 	
 	g_last_map_players.resize(0);
@@ -713,6 +724,15 @@ void te_playersprites(CBasePlayer@ target,
 	m.End();
 }
 
+void delayGagIcon(EHandle h_plr) {
+	CBasePlayer@ plr = cast<CBasePlayer@>(h_plr.GetEntity());
+	
+	if (plr is null or !plr.IsConnected())
+		return;
+	
+	plr.ShowOverheadSprite(g_sprites[2], 51.0f, 1.5f);
+}
+
 HookReturnCode ClientSay(SayParameters@ pParams) {
     const CCommand@ pArguments = pParams.GetArguments();
 	CBasePlayer@ pPlayer = pParams.GetPlayer();
@@ -781,9 +801,17 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
                 const float w = float(g_Delay - d) / 1000.0f;
                 g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTCENTER, "Wait " + format_float(w) + " seconds\n");
 
-                if (pitchOverride || pArguments.ArgC() == 1) {
-                    pParams.ShouldHide = true;
-                }
+                if (allowrelay)
+                    return HOOK_CONTINUE;
+                else if (pitchOverride)
+                    player_say(pPlayer, soundArgUpper); // hide the pitch modifier
+                else
+                    player_say(pPlayer, pParams.GetCommand());
+
+				te_killplayerattachments(pPlayer);
+				g_Scheduler.SetTimeout("delayGagIcon", 0.1f, EHandle(pPlayer));
+				
+                pParams.ShouldHide = true;
             }
             else {
                 logSoundStat(pPlayer, soundArg);
@@ -795,7 +823,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 				}
                 else {
                     if (precached) {
-                        pPlayer.ShowOverheadSprite( g_sprites[Math.RandomLong(0, g_sprites.length()-1)], 56.0f, 2.5f);
+                        pPlayer.ShowOverheadSprite( g_sprites[Math.RandomLong(0, 1)], 56.0f, 2.5f);
                     }
                     const float volume      = 1.0f; // increased volume from .75 since converting stereo sounds to mono made them quiet
                     const float attenuation = 0.4f; // less = bigger sound range
@@ -807,6 +835,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 					if (soundArg == 'kiss2') {
 						kiss_effect(EHandle(pPlayer), 1);
 					}
+					/*
 					if (soundArg == 'bonk' and pitchArg.Length() > 0) {
 						string targetid = pitchArg;
 						targetid = targetid.ToLowercase();
@@ -819,9 +848,10 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 							g_SoundSystem.StopSound(target.edict(), tstate.lastSoundChan, tstate.lastSound);
 						}
 					}
+					*/
                 }
 				
-				if (soundArg == 'toot' || soundArg == 'tooot' || soundArg == 'brap' || soundArg == 'tootrape' || soundArg == 'braprape' || soundArg == "bloodbrap" || soundArg == "bloodbraprape") {
+				if (soundArg == 'toot' || soundArg == 'tooot' || soundArg == 'brap' || soundArg == 'tootrape' || soundArg == 'braprape' || soundArg == "bloodbrap" || soundArg == "bloodbraprape" || soundArg == "braplong") {
 					do_brap(pPlayer, soundArg, pitch);
 				}
 				if (soundArg == 'sniff' || soundArg == 'snifff' || soundArg == 'sniffrape') {
@@ -856,9 +886,13 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
             setvol(steamId, pArguments[1], pPlayer);
         }
         else if (pArguments.ArgC() > 0 && soundArg == '.csstats') {
-            g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Usage stats sent to your console.\n");
-            pParams.ShouldHide = true;
-            showSoundStats(pPlayer, pArguments.Arg(1));
+			pParams.ShouldHide = true;
+			if (g_stats_enabled) {
+				g_PlayerFuncs.SayText(pPlayer, "[ChatSounds] Usage stats sent to your console.\n");
+				showSoundStats(pPlayer, pArguments.Arg(1));
+			} else {
+				g_PlayerFuncs.ClientPrint(pPlayer, HUD_PRINTTALK, "Chat sound stats are disabled.\n");
+			}
         }
 		else if (pArguments.ArgC() > 0 && soundArg == '.csload') {
 			csload(pPlayer, pArguments);
