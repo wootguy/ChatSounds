@@ -3,10 +3,10 @@ class Brap {
 	EHandle h_model;
 	float expire_time; // time brap should be deleted if inactive
 	
-	Brap(EHandle h_sprite, EHandle h_model) {
+	Brap(EHandle h_sprite, EHandle h_model, float lifetime=BRAP_LIFE) {
 		this.h_sprite = h_sprite;
 		this.h_model = h_model;
-		expire_time = g_Engine.time + BRAP_LIFE;
+		expire_time = g_Engine.time + lifetime;
 	}
 	
 	Brap() {}
@@ -190,7 +190,7 @@ void bubble_toot(EHandle h_plr, int power) {
 	}
 }
 
-void cloud_toot(EHandle h_ent, float spread, float baseSpeed, float speedMultMax) {
+void cloud_toot(EHandle h_ent, float spread, float baseSpeed, float speedMultMax, float braplife) {
 	CBaseEntity@ ent = h_ent;
 	CBasePlayer@ plr = cast<CBasePlayer@>(ent);
 	if (ent is null) {
@@ -255,7 +255,7 @@ void cloud_toot(EHandle h_ent, float spread, float baseSpeed, float speedMultMax
 	brapSprite.pev.movetype = MOVETYPE_FOLLOW;
 	@brapSprite.pev.aiment = @brapModel.edict();
 	
-	g_braps.insertLast(Brap(EHandle(brapSprite), EHandle(brapModel)));
+	g_braps.insertLast(Brap(EHandle(brapSprite), EHandle(brapModel), braplife));
 }
 
 void shit(EHandle h_plr, int scale, bool isBlood) {
@@ -300,23 +300,35 @@ void do_brap(CBasePlayer@ plr, string arg, float pitch) {
 			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 1, EHandle(tootEnt), 40);
 		} else if (arg == "tootrape") {
 			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 2, EHandle(tootEnt), 180);
+		} else if (arg == "braplong") {
+			g_Scheduler.SetInterval("bubble_toot", 0.05f*speed, 270, EHandle(tootEnt), 2);
 		}
 	} else {
 		if (arg == "brap" || arg == "bloodbrap") {
-			g_Scheduler.SetInterval("cloud_toot", 0.1f*speed, 8, EHandle(tootEnt), 90.0f, 100.0f, 1.5f);
+			g_Scheduler.SetInterval("cloud_toot", 0.1f*speed, 8, EHandle(tootEnt), 90.0f, 100.0f, 1.5f, BRAP_LIFE);
 			g_Scheduler.SetInterval("shit", 0.05f*speed, 20, EHandle(tootEnt), 8, arg == "bloodbrap");
 		} else if (arg == "braprape" || arg == "bloodbraprape") {
-			g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 15, EHandle(tootEnt), 360.0f, 150.0f, 2.0f);
+			g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 15, EHandle(tootEnt), 360.0f, 150.0f, 2.0f, BRAP_LIFE);
 			g_Scheduler.SetInterval("shit", 0.05f*speed, 15, EHandle(tootEnt), 32, arg == "bloodbraprape");
 		} else if (arg == "toot") {
-			g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 0, 100.0f, 1.0f);
+			g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 0, 100.0f, 1.0f, BRAP_LIFE);
 		} else if (arg == "tooot") {
 			for (uint i = 0; i < 10; i++) {
-				g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 20.0f, 100.0f, 3.0f);
+				g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 20.0f, 100.0f, 3.0f, BRAP_LIFE);
 			}
+		} else if (arg == "braplong") {
+			g_Scheduler.SetInterval("cloud_toot", 0.288f*speed, 48, EHandle(tootEnt), 10.0f, 20.0f, 3.0f, BRAP_LIFE*0.2f*speed);
+			g_Scheduler.SetTimeout("cloud_toot", 13.8f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 13.8f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 13.8f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 13.8f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 14.9f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 14.9f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 14.9f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
+			g_Scheduler.SetTimeout("cloud_toot", 14.9f*speed, EHandle(tootEnt), 20.0f, 40.0f, 3.0f, BRAP_LIFE*0.5f);
 		} else if (arg == "tootrape") {
 			for (uint i = 0; i < 40; i++) {
-				g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 20.0f, 200.0f, 8.0f);
+				g_Scheduler.SetInterval("cloud_toot", 0.05f*speed, 1, EHandle(tootEnt), 20.0f, 200.0f, 8.0f, BRAP_LIFE);
 			}
 		}
 	}
