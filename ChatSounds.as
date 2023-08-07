@@ -52,7 +52,7 @@ class ChatSound {
 			}
 			wordList.insertLast(trigger);
 			
-			for (uint j = i; j < triggerLen; j++)
+			for (uint j = 1; j < triggerLen-i+1; j++)
 			{
 				string containSequence = trigger.SubString(i, j);
 				// if (containSequence == "mot")
@@ -68,7 +68,18 @@ class ChatSound {
 					@wordList = cast<array<string>>( g_SoundContainTrie[containSequence] );
 				}
 				
-				wordList.insertLast(trigger);
+				bool alreadyExists = false;
+				for(uint k = 0; k < wordList.length(); k++)
+				{
+					if (wordList[k] == trigger)
+					{
+						alreadyExists = true;
+						break;
+					}
+						
+				}
+				if (!alreadyExists)
+					wordList.insertLast(trigger);
 			}
 		}
 		
