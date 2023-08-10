@@ -35,51 +35,56 @@ class ChatSound {
 	
 	ChatSound(string trigger, string fpath, bool alwaysPrecache) {
 		const uint triggerLen = trigger.Length();
+		// if (trigger == "smithlol")
+					// g_PlayerFuncs.SayTextAll(null, "Found smith! length for word "+triggerLen+"\n");
 	
 		for (uint i = 0; i < triggerLen; i++)
 		{
 			string triggerSequence = trigger.SubString(0, i+1);
 			
-			array<string>@ wordList;
+			dictionary@ wordList;
 			if( !g_SoundBeginTrie.exists(triggerSequence) )
 			{
-				@wordList = array<string>();
+				@wordList = dictionary();
 				g_SoundBeginTrie[triggerSequence] = @wordList;
 			}
 			else
 			{
-				@wordList = cast<array<string>>( g_SoundBeginTrie[triggerSequence] );
+				@wordList = cast<dictionary@>( g_SoundBeginTrie[triggerSequence] );
 			}
-			wordList.insertLast(trigger);
+			// wordList.insertLast(trigger);
+			wordList[trigger] = true;
 			
 			for (uint j = 1; j < triggerLen-i+1; j++)
 			{
 				string containSequence = trigger.SubString(i, j);
-				// if (containSequence == "mot")
-					// g_PlayerFuncs.SayTextAll(null, "Found mot! for word "+trigger);
+				// if (trigger == "smithlol")
+					// g_PlayerFuncs.SayTextAll(null, "Found smith! for word "+containSequence+" "+(i)+":"+j+"\n");
 				
 				if( !g_SoundContainTrie.exists(containSequence) )
 				{
-					@wordList = array<string>();
+					@wordList = dictionary();
 					g_SoundContainTrie[containSequence] = @wordList;
 				}
 				else
 				{
-					@wordList = cast<array<string>>( g_SoundContainTrie[containSequence] );
+					@wordList = cast<dictionary@>( g_SoundContainTrie[containSequence] );
 				}
 				
-				bool alreadyExists = false;
-				for(uint k = 0; k < wordList.length(); k++)
-				{
-					if (wordList[k] == trigger)
-					{
-						alreadyExists = true;
-						break;
-					}
+				// bool alreadyExists = false;
+				// for(uint k = 0; k < wordList.length(); k++)
+				// {
+					// if (wordList[k] == trigger)
+					// {
+						// alreadyExists = true;
+						// break;
+					// }
 						
-				}
-				if (!alreadyExists)
-					wordList.insertLast(trigger);
+				// }
+				// if (!alreadyExists)
+					// wordList.insertLast(trigger);
+				if (!wordList.exists(trigger))
+					wordList[trigger] = true;
 			}
 		}
 		
@@ -113,6 +118,9 @@ class PlayerState {
 	
 	string lastSound;
 	SOUND_CHANNEL lastSoundChan;
+	
+	string lastEmittedSound = ""; // last chatsound played by the user
+	float lastEmittedTime; // time of last chatsound played by user
 }
 
 uint g_Delay = g_BaseDelay;
@@ -174,6 +182,26 @@ void PluginExit() {
 		writeUsageStats();
 	writePersonalSoundLists();
 	brap_unload();
+}
+
+void stop_crying()
+{
+	for( int i = 1; i <= g_Engine.maxClients; ++i ) 
+	{
+		CBasePlayer@ target = g_PlayerFuncs.FindPlayerByIndex( i );
+
+		if (target is null or !target.IsConnected())
+			continue;
+			
+		PlayerState@ tstate = getPlayerState(target);
+		
+		if (g_Engine.time - tstate.lastEmittedTime < 14.f && tstate.lastEmittedSound.SubString(0, 3) == "cry")
+		{
+			stop_mic_sound(target);
+			g_SoundSystem.StopSound(target.edict(), tstate.lastSoundChan, tstate.lastSound);
+			// g_PlayerFuncs.SayTextAll(null, "Stopped player from crying!\n");
+		}
+	}
 }
 
 void kiss_effect(EHandle h_plr, int kissLeft) {
@@ -369,6 +397,8 @@ HookReturnCode MapChange() {
 
 void ReadSounds() {
     g_SoundList.deleteAll();
+	g_SoundBeginTrie.deleteAll();
+	g_SoundContainTrie.deleteAll();
 	g_normalSoundKeys.resize(0);
 	g_extraSoundKeys.resize(0);
 	
@@ -394,7 +424,7 @@ void ReadSounds() {
             if (parsed.length() < 2)
                 continue;
 
-			ChatSound sound = ChatSound(parsed[0], parsed[1], !parsingExtraSounds);			
+			ChatSound sound = ChatSound(parsed[0], parsed[1], !parsingExtraSounds);
 			
 			if (parsingExtraSounds) {
 				g_extraSoundKeys.insertLast(parsed[0]);
@@ -406,6 +436,7 @@ void ReadSounds() {
         }
         file.Close();
         @g_SoundListKeys = g_SoundList.getKeys();
+		
         g_SoundListKeys.sortAsc();
         g_normalSoundKeys.sortAsc();
         g_extraSoundKeys.sortAsc();
@@ -467,61 +498,86 @@ void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
 		{
 			lines.insertLast("\nSOUND TRIGGERS STARTING WITH '"+trigger+"'\n");
 			lines.insertLast("------------------------\n");
-			array<string>@ triggers = cast<array<string>>( g_SoundBeginTrie[trigger] );
+			array<string> triggers = cast<dictionary@>( g_SoundBeginTrie[trigger] ).getKeys();
+			// triggers.sortAsc();
 
+			uint triggersAdded = 0;
+			uint msgLen = 0;
 			for (uint i = 0; i < triggers.length(); i++)
 			{
-				sMessage += triggers[i] + " | ";
+				const string str = triggers[i];
+				const uint strLen = str.Length();
 				
-				if (i % 5 == 0) {
-					sMessage.Resize(sMessage.Length() -2);
+				if (msgLen + strLen > 30)
+				{
 					lines.insertLast(sMessage);
 					lines.insertLast("\n");
 					sMessage = "";
+					msgLen = 0;
 				}
+				if (msgLen > 0)
+					sMessage += " | ";
+				
+				sMessage += str;
+				msgLen += strLen;
+				
+				// g_PlayerFuncs.SayTextAll(null, "Found begin trigger: "+triggers[i]+" for keyword: "+trigger+" "+sMessage+"\n");
 			}
+			
+			lines.insertLast(sMessage);
+			lines.insertLast("\n");
+			sMessage = "";
 		}
 		else
 		{
 			g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "\nCouldn't find any sound that begins with that sequence.\n");
 		}
 		
+		
 		if (g_SoundContainTrie.exists(trigger))
 		{
 			lines.insertLast("\nSOUND TRIGGERS CONTAINING '"+trigger+"'\n");
 			lines.insertLast("------------------------\n");
-			array<string>@ ctriggers = cast<array<string>>( g_SoundContainTrie[trigger] );
+			array<string> triggers = cast<dictionary@>( g_SoundContainTrie[trigger] ).getKeys();
 
-			for (uint i = 0; i < ctriggers.length(); i++)
+			uint triggersAdded = 0;
+			uint msgLen = 0;
+			for (uint i = 0; i < triggers.length(); i++)
 			{
-				sMessage += ctriggers[i] + " | ";
+				const string str = triggers[i];
+				const uint strLen = str.Length();
 				
-				if (i % 5 == 0) {
-					sMessage.Resize(sMessage.Length() -2);
+				if (msgLen + strLen > 30)
+				{
 					lines.insertLast(sMessage);
 					lines.insertLast("\n");
 					sMessage = "";
+					msgLen = 0;
 				}
+				if (msgLen > 0)
+					sMessage += " | ";
+				
+				sMessage += str;
+				msgLen += strLen;
+				
+				// g_PlayerFuncs.SayTextAll(null, "Found contain trigger: "+triggers[i]+" for keyword: "+trigger+" "+sMessage+"\n");
 			}
+			
+			lines.insertLast(sMessage);
+			lines.insertLast("\n");
+			sMessage = "";
 		}
 		else
 		{
 			g_PlayerFuncs.ClientPrint(plr, HUD_PRINTTALK, "Couldn't find any sound that contains with that sequence.\n");
 		}
 		
-		if (lines.length() > 0)
-		{
-			if (sMessage.Length() > 2) {
-				sMessage.Resize(sMessage.Length() -2);
-				lines.insertLast(sMessage + "\n");
-			}
-			
-			lines.insertLast("\n\n");
-			delay_print(EHandle(plr), lines, 24);
-			return;
-		}
+		lines.insertLast("\n");
+		delay_print(EHandle(plr), lines, 24);
+		return;
 	}
 	
+	// lines.insertLast("Amount of sounds: "+g_extraSoundKeys.length());
 	lines.insertLast("\nEXTRA SOUND TRIGGERS\n");
     lines.insertLast("------------------------\n");
 
@@ -789,6 +845,10 @@ void player_say(CBaseEntity@ plr, string msg) {
 } */
 
 void play_chat_sound(CBasePlayer@ speaker, SOUND_CHANNEL channel, ChatSound@ snd, float volume, float attenuation, int pitch) {
+	PlayerState@ speakerState = getPlayerState(speaker);
+	speakerState.lastEmittedSound = snd.trigger;
+	speakerState.lastEmittedTime = g_Engine.time;
+
 	string speakerId = g_EngineFuncs.GetPlayerAuthId(speaker.edict());
 	speakerId = speakerId.ToLowercase();
 	
@@ -939,6 +999,7 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
                     if (precached) {
                         pPlayer.ShowOverheadSprite( g_sprites[Math.RandomLong(0, 1)], 56.0f, 2.5f);
                     }
+					
                     const float volume      = 1.0f; // increased volume from .75 since converting stereo sounds to mono made them quiet
                     const float attenuation = 0.4f; // less = bigger sound range
                     play_chat_sound(pPlayer, CHAN_VOICE, chatsound, volume, attenuation, pitch);
@@ -948,6 +1009,11 @@ HookReturnCode ClientSay(SayParameters@ pParams) {
 					}
 					if (soundArg == 'kiss2') {
 						kiss_effect(EHandle(pPlayer), 1);
+					}
+					
+					if (soundArg == "stopcrying" || soundArg == "stopcrying2" || soundArg == "stopwhine" || soundArg == "dontcry" || soundArg == "dontcry2") {
+						// stop_crying();
+						g_Scheduler.SetTimeout("stop_crying", 2.f); //delay it so they can hear the player say "stop crying" before doing so
 					}
 					/*
 					if (soundArg == 'bonk' and pitchArg.Length() > 0) {
