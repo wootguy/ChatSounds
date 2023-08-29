@@ -11,6 +11,7 @@ const string soundStatsFile   = "scripts/plugins/store/cs_stats.txt"; // .csstat
 const string soundListsFile   = "scripts/plugins/store/cs_lists.txt"; // personal sound lists
 const string g_spk_folder     = "scripts/plugins/temp"; // path to sound files converted to NetworkMessage format
 const string micsound_file    = "scripts/plugins/store/_tocs.txt";
+const string g_soundlist_link = "";
 const uint g_BaseDelay        = 6666;
 const array<string> g_sprites = {'sprites/flower.spr', 'sprites/nyanpasu2.spr', 'sprites/flowergag.spr'};
 const uint MAX_PERSONAL_SOUNDS = 8;
@@ -581,24 +582,29 @@ void listsounds2(CBasePlayer@ plr, const CCommand@ args) {
 	lines.insertLast("\nEXTRA SOUND TRIGGERS\n");
     lines.insertLast("------------------------\n");
 
-    for (uint i = 1; i < g_extraSoundKeys.length()+1; ++i) {
-        sMessage += g_extraSoundKeys[i-1] + " | ";
+	if (g_soundlist_link.Length() > 0) {
+		lines.insertLast("View the full sound list in your browser (" + (g_extraSoundKeys.size() + g_normalSoundKeys.size()) + " sounds):\n");
+		lines.insertLast(g_soundlist_link + "\n\n");
+	} else {
+		for (uint i = 1; i < g_extraSoundKeys.length()+1; ++i) {
+			sMessage += g_extraSoundKeys[i-1] + " | ";
 
-        if (i % 5 == 0) {
-            sMessage.Resize(sMessage.Length() -2);
-            lines.insertLast(sMessage);
-            lines.insertLast("\n");
-            sMessage = "";
-        }
-    }
+			if (i % 5 == 0) {
+				sMessage.Resize(sMessage.Length() -2);
+				lines.insertLast(sMessage);
+				lines.insertLast("\n");
+				sMessage = "";
+			}
+		}
 
-    if (sMessage.Length() > 2) {
-        sMessage.Resize(sMessage.Length() -2);
-        lines.insertLast(sMessage + "\n");
-    }
+		if (sMessage.Length() > 2) {
+			sMessage.Resize(sMessage.Length() -2);
+			lines.insertLast(sMessage + "\n");
+		}
+	}
 
-    lines.insertLast("\nThese sounds need to be selected with '.csload' before they can be used.\n");
-    lines.insertLast("Unloaded sounds can be previewed with the '.cs' command, or streamed by default with the '.csmic' command.\n");
+	lines.insertLast(".listsounds2 sounds are streamed with '.csmic' and can be loaded as normal sounds using '.csload'.\n");
+	lines.insertLast("Type '.listsounds2 <search text>' to find a sound by name.\n");
     lines.insertLast("Type '.listsounds' to see the list of sounds that are always loaded.\n\n");
 
 	delay_print(EHandle(plr), lines, 24);
